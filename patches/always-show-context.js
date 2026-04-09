@@ -13,10 +13,10 @@
  * 3. Fix the warning color to be neutral when below threshold
  * 4. Soften "Context low" label to "Context" for always-on display
  *
- * For auto-compact users (the default): shows a dim "X% until auto-compact"
- * or "X% context used" line at all times. For manual-compact users: shows
- * "Context (X% remaining)" in neutral color when below threshold, escalating
- * to warning/error colors as context fills up.
+ * For auto-compact users (the default): shows a dim "X% context used"
+ * line at all times. For manual-compact users: shows "Context (X% remaining)"
+ * in neutral color when below threshold, escalating to warning/error colors
+ * as context fills up.
  */
 
 export default {
@@ -102,6 +102,22 @@ export default {
         'Context'
       );
       pos += needle.length;
+    }
+
+    // Edit 4: Change "X% until auto-compact" → "X% context used"
+    // The bundle has: reactiveOnlyMode ? `${100-var}% context used` : `${var}% until auto-compact`
+    // reactiveOnlyMode is always false, so patch the alternate branch to also show context used.
+    const autocompactTpl = findFirst(fn, n =>
+      n.type === 'TemplateLiteral' &&
+      n.quasis.some(q => q.value?.raw?.includes('% until auto-compact'))
+    );
+    if (autocompactTpl) {
+      const varName = src(autocompactTpl.expressions[0]);
+      editor.replaceRange(
+        autocompactTpl.start,
+        autocompactTpl.end,
+        `\`\${100-${varName}}% context used\``
+      );
     }
   },
 };
