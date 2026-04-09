@@ -1,0 +1,41 @@
+{
+  "name": "claude-code-extensions",
+  "version": "0.1.0",
+  "description": "Modular, opt-in patches for @anthropic-ai/claude-code applied at runtime via AST transformation",
+  "type": "module",
+  "bin": {
+    "cx": "./cx",
+    "cx-setup": "./cx-setup"
+  },
+  "files": [
+    "cx",
+    "cx-setup",
+    "ast.js",
+    "transform.js",
+    "transform-worker.js",
+    "patch-worker.js",
+    "setup.js",
+    "patches/"
+  ],
+  "dependencies": {
+    "acorn": "^8.16.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-code": "*"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-code": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "extensions",
+    "patches"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
