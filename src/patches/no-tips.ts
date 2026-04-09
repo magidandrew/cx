@@ -6,7 +6,9 @@
  * scheduled tips nor the time-based /clear and /btw tips appear.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'no-tips',
   name: 'No Tips',
   description: 'Hide spinner tips',
@@ -27,3 +29,5 @@ export default {
     editor.replaceRange(decl.init.start, decl.init.end, 'void 0');
   },
 };
+
+export default patch;

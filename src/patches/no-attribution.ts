@@ -3,7 +3,7 @@
  *
  * Strips all Claude Code attribution from commits and PRs:
  *   - Removes "Co-Authored-By: <model> <noreply@anthropic.com>" from commits
- *   - Removes "🤖 Generated with Claude Code" from PR descriptions
+ *   - Removes "Generated with Claude Code" from PR descriptions
  *   - Removes enhanced attribution ("X% N-shotted by ...") from PRs
  *
  * Works by patching getAttributionTexts() and getEnhancedPRAttribution()
@@ -11,7 +11,9 @@
  * gracefully via ternary guards.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'no-attribution',
   name: 'No Attribution',
   description: 'Strip Claude Code attribution from commits and PRs',
@@ -20,10 +22,10 @@ export default {
     const { ast, editor, find, index, assert } = ctx;
 
     // ── getAttributionTexts ──────────────────────────────────────────
-    // Returns { commit: "Co-Authored-By: ...", pr: "🤖 Generated..." }
+    // Returns { commit: "Co-Authored-By: ...", pr: "Generated..." }
     // Find via TemplateLiteral quasis containing "noreply@anthropic.com"
 
-    const noreplyQuasi = find.findFirst(ast, n =>
+    const noreplyQuasi = find.findFirst(ast, (n: any) =>
       n.type === 'TemplateElement' &&
       n.value?.cooked?.includes('noreply@anthropic.com'));
     assert(noreplyQuasi, 'Could not find TemplateElement with noreply@anthropic.com');
@@ -37,7 +39,7 @@ export default {
     editor.insertAt(getAttrTexts.body.start + 1, 'return{commit:"",pr:""};');
 
     // ── getEnhancedPRAttribution ─────────────────────────────────────
-    // Returns "🤖 Generated with Claude Code (X% N-shotted by ...)"
+    // Returns "Generated with Claude Code (X% N-shotted by ...)"
     // Find via the unique debug string literal it contains
 
     const enhancedFns = index.findFunctionsContainingStrings(
@@ -53,3 +55,5 @@ export default {
     editor.insertAt(getEnhanced.body.start + 1, 'return"";');
   },
 };
+
+export default patch;

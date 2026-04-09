@@ -21,13 +21,14 @@ import { execSync, spawn as nodeSpawn } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { transformAsync, listPatches } from './transform.js';
+import type { CxConfig, PatchInfo } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolve(__dirname, '.cx-patches.json');
-const cacheDir = resolve(__dirname, '.cache');
+const CONFIG_PATH = resolve(__dirname, '..', '.cx-patches.json');
+const cacheDir = resolve(__dirname, '..', '.cache');
 const cachedCliPath = resolve(cacheDir, 'cli.mjs');
 const metaPath = resolve(cacheDir, 'meta.json');
-const PID_FILE = resolve(__dirname, '.cx-pid');
+const PID_FILE = resolve(__dirname, '..', '.cx-pid');
 const RELOAD_EXIT_CODE = 75;
 
 // ── Subcommands (fast path, before any heavy work) ───────────────────────
@@ -39,7 +40,7 @@ if (sub === 'reload') {
     const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10);
     process.kill(pid, 'SIGUSR1');
     process.stderr.write('\x1b[2mcx: reload signal sent\x1b[0m\n');
-  } catch (e) {
+  } catch (e: any) {
     const msg = e.code === 'ENOENT' ? 'no cx instance running'
       : e.code === 'ESRCH' ? 'cx process not running'
       : e.message;
@@ -51,16 +52,16 @@ if (sub === 'reload') {
 
 // ── Config ───────────────────────────────────────────────────────────────
 
-function loadConfig() {
+function loadConfig(): CxConfig | null {
   if (!existsSync(CONFIG_PATH)) return null;
-  try { return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')); } catch { return null; }
+  try { return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) as CxConfig; } catch { return null; }
 }
 
-function getEnabledPatches() {
+function getEnabledPatches(): string[] {
   const config = loadConfig();
   const all = listPatches();
   if (!config?.patches) return all.map(p => p.id);
-  return all.filter(p => {
+  return all.filter((p: PatchInfo) => {
     if (p.id in config.patches) return config.patches[p.id] !== false;
     return p.defaultEnabled !== false;
   }).map(p => p.id);
@@ -89,7 +90,7 @@ if (!existsSync(CONFIG_PATH)) {
 
 // ── Locate cli.js ────────────────────────────────────────────────────────
 
-let cliPath;
+let cliPath: string | undefined;
 try {
   const npmRoot = execSync('npm root -g', { encoding: 'utf-8' }).trim();
   cliPath = resolve(npmRoot, '@anthropic-ai/claude-code/cli.js');
@@ -103,9 +104,9 @@ if (!cliPath || !existsSync(cliPath)) {
 
 // ── Cache ────────────────────────────────────────────────────────────────
 
-async function ensureCache() {
+async function ensureCache(): Promise<void> {
   const enabled = getEnabledPatches();
-  const stat = statSync(cliPath);
+  const stat = statSync(cliPath!);
   const key = `${stat.size}:${stat.mtimeMs}:${[...enabled].sort().join(',')}`;
 
   let valid = false;
@@ -129,7 +130,7 @@ async function ensureCache() {
       process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ preparing (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
     }, 100);
 
-    const original = readFileSync(cliPath, 'utf-8');
+    const original = readFileSync(cliPath!, 'utf-8');
     const patched = await transformAsync(original, enabled, {
       onReady() {
         clearInterval(timer);
@@ -137,7 +138,7 @@ async function ensureCache() {
         const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
         process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ ready (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
       },
-      onDone(id) {
+      onDone(id: string) {
         const idx = enabled.indexOf(id);
         const up = total - idx;
         process.stderr.write(`\x1b[${up}A\r\x1b[32m  ✔ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`);
@@ -157,12 +158,12 @@ async function ensureCache() {
 // ── PID file ─────────────────────────────────────────────────────────────
 
 writeFileSync(PID_FILE, String(process.pid));
-function cleanPid() { try { unlinkSync(PID_FILE); } catch {} }
+function cleanPid(): void { try { unlinkSync(PID_FILE); } catch {} }
 process.on('exit', cleanPid);
 
 // ── Reload loop ──────────────────────────────────────────────────────────
 
-let child = null;
+let child: ReturnType<typeof nodeSpawn> | null = null;
 let shouldReload = false;
 
 process.on('SIGUSR1', () => {
@@ -184,7 +185,7 @@ process.on('SIGTERM', () => {
 /**
  * Build args for a reload: strip --continue/--resume, prepend --continue.
  */
-function reloadArgs(original) {
+function reloadArgs(original: string[]): string[] {
   const skip = new Set(['--continue', '-c', '--resume', '-r']);
   const result = ['--continue'];
   for (let i = 0; i < original.length; i++) {
@@ -214,7 +215,7 @@ while (true) {
     env: process.env,
   });
 
-  const code = await new Promise(r => child.on('close', (c) => r(c)));
+  const code = await new Promise<number | null>(r => child!.on('close', (c) => r(c)));
   child = null;
 
   if (shouldReload || code === RELOAD_EXIT_CODE) {

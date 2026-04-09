@@ -6,7 +6,9 @@
  * in the boxed layout. No extra elements, no layout changes.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'banner',
   name: 'Attribution Banner',
   description: 'Show "@wormcoffee" on the Claude Code title line',
@@ -23,14 +25,14 @@ export default {
     for (const lit of claudeCodeLiterals) {
       const call = index.ancestor(lit, 'CallExpression');
       if (!call || call.callee.type !== 'MemberExpression' || call.callee.property.name !== 'createElement') continue;
-      const hasBold = call.arguments.some(a =>
+      const hasBold = call.arguments.some((a: any) =>
         a?.type === 'ObjectExpression' &&
-        a.properties.some(p => p.key?.type === 'Identifier' && p.key.name === 'bold'));
+        a.properties.some((p: any) => p.key?.type === 'Identifier' && p.key.name === 'bold'));
       if (hasBold) { boldTextCall = call; break; }
     }
     assert(boldTextCall, 'Could not find createElement(T, {bold}, "Claude Code")');
 
-    const textLiteral = boldTextCall.arguments.find(a =>
+    const textLiteral = boldTextCall.arguments.find((a: any) =>
       a.type === 'Literal' && a.value === 'Claude Code');
     editor.replaceRange(textLiteral.start, textLiteral.end,
       '"Claude Code Extensions (cx) by x.com/@wormcoffee"');
@@ -56,3 +58,5 @@ export default {
     }
   },
 };
+
+export default patch;

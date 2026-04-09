@@ -16,26 +16,27 @@ import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { listPatches } from './transform.js';
+import type { CxConfig } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolve(__dirname, '.cx-patches.json');
-const CACHE_DIR = resolve(__dirname, '.cache');
+const CONFIG_PATH = resolve(__dirname, '..', '.cx-patches.json');
+const CACHE_DIR = resolve(__dirname, '..', '.cache');
 
-const DIM = '\x1b[2m', BOLD = '\x1b[1m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', RED = '\x1b[31m', RESET = '\x1b[0m';
+const DIM = '\x1b[2m', BOLD = '\x1b[1m', GREEN = '\x1b[32m', RESET = '\x1b[0m';
 
 // ── Config helpers ────────────────────────────────────────────────────────
 
-function loadConfig() {
+function loadConfig(): Record<string, boolean> {
   if (!existsSync(CONFIG_PATH)) return {};
-  try { return JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')).patches || {}; } catch { return {}; }
+  try { return (JSON.parse(readFileSync(CONFIG_PATH, 'utf-8')) as CxConfig).patches || {}; } catch { return {}; }
 }
 
-function saveConfig(patches) {
+function saveConfig(patches: Record<string, boolean>): void {
   writeFileSync(CONFIG_PATH, JSON.stringify({ patches }, null, 2) + '\n');
   invalidateCache();
 }
 
-function invalidateCache() {
+function invalidateCache(): void {
   try { rmSync(CACHE_DIR, { recursive: true, force: true }); } catch { /* ok */ }
 }
 

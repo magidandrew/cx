@@ -5,7 +5,9 @@
  * instead of the default orange theme color.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'random-clawd',
   name: 'Random Clawd Color',
   description: 'Randomize the Clawd mascot color on each startup',
@@ -17,7 +19,7 @@ export default {
     // Find the Clawd component: function oM6(q) { ... }
     // Identified by containing the strings "clawd_body" and "clawd_background"
     // and the feet characters "▘▘ ▝▝".
-    const clawdFn = findFirst(ast, n => {
+    const clawdFn = findFirst(ast, (n: any) => {
       if (n.type !== 'FunctionDeclaration') return false;
       let hasClawd = false, hasFeet = false;
       for (const child of find.walkAST(n.body)) {
@@ -42,7 +44,7 @@ export default {
       `var __rc=${colorArray}[Math.floor(Math.random()*${colors.length})];`);
 
     // Replace all "clawd_body" literals within the function with __rc
-    const clawdBodyLiterals = findAll(clawdFn, n =>
+    const clawdBodyLiterals = findAll(clawdFn, (n: any) =>
       n.type === 'Literal' && n.value === 'clawd_body');
 
     for (const lit of clawdBodyLiterals) {
@@ -50,3 +52,5 @@ export default {
     }
   },
 };
+
+export default patch;

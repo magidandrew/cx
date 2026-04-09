@@ -4,12 +4,6 @@
  * Parses the minified bundle with acorn and applies modular patches
  * from the patches/ directory. Each patch receives a context object
  * with the AST, source, editor, and query helpers.
- *
- * Usage:
- *   import { transform } from './transform.js';
- *   const patched = transform(source);                    // all patches
- *   const patched = transform(source, ['queue']);          // specific patches
- *   const patched = transform(source, null, ['banner']);   // exclude patches
  */
 
 import * as acorn from 'acorn';
@@ -18,6 +12,7 @@ import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { ASTIndex, SourceEditor, buildContext } from './ast.js';
 import * as allPatches from './patches/index.js';
+import type { Patch, PatchInfo, ASTNode, TransformCallbacks, WorkerMessage } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -25,8 +20,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Patch resolution
 // ═══════════════════════════════════════════════════════════════════════════
 
-function resolvePatches(only, exclude) {
-  const available = Object.values(allPatches);
+function resolvePatches(only: string[] | null, exclude: string[] | null): Patch[] {
+  const available = Object.values(allPatches) as Patch[];
   if (only) {
     return only.map(id => {
       const p = available.find(p => p.id === id);
@@ -41,27 +36,26 @@ function resolvePatches(only, exclude) {
 // Transform (sequential)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * @param {string} source - Raw cli.js source
- * @param {string[]|null} only - If set, only apply these patch IDs
- * @param {string[]|null} exclude - If set, skip these patch IDs
- * @returns {string} Patched source
- */
-export function transform(source, only = null, exclude = null, { onReady, onDone } = {}) {
-  const ast = acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true });
+export function transform(
+  source: string,
+  only: string[] | null = null,
+  exclude: string[] | null = null,
+  callbacks: TransformCallbacks = {},
+): string {
+  const ast = acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true }) as unknown as ASTNode;
   const index = new ASTIndex(ast);
   const editor = new SourceEditor();
   const ctx = buildContext(source, index, editor);
   const toApply = resolvePatches(only, exclude);
 
-  onReady?.();
+  callbacks.onReady?.();
   for (const patch of toApply) {
     try {
       patch.apply(ctx);
     } catch (err) {
-      throw new Error(`Patch "${patch.id}" failed: ${err.message}`);
+      throw new Error(`Patch "${patch.id}" failed: ${(err as Error).message}`);
     }
-    onDone?.(patch.id);
+    callbacks.onDone?.(patch.id);
   }
 
   return editor.apply(source);
@@ -71,11 +65,11 @@ export function transform(source, only = null, exclude = null, { onReady, onDone
 // Transform (async — single worker thread for non-blocking UI)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/**
- * Runs parse + index + all patches in a single worker thread.
- * Keeps the main thread free for UI updates (timers, spinners).
- */
-export function transformAsync(source, patchIds, { onReady, onDone } = {}) {
+export function transformAsync(
+  source: string,
+  patchIds: string[],
+  callbacks: TransformCallbacks = {},
+): Promise<string> {
   const workerPath = resolve(__dirname, 'transform-worker.js');
   const patchesDir = resolve(__dirname, 'patches');
 
@@ -83,9 +77,9 @@ export function transformAsync(source, patchIds, { onReady, onDone } = {}) {
     const worker = new Worker(workerPath, {
       workerData: { source, patchIds, patchesDir },
     });
-    worker.on('message', msg => {
-      if (msg.type === 'ready') onReady?.();
-      else if (msg.type === 'done') onDone?.(msg.id);
+    worker.on('message', (msg: WorkerMessage) => {
+      if (msg.type === 'ready') callbacks.onReady?.();
+      else if (msg.type === 'done') callbacks.onDone?.(msg.id);
       else if (msg.type === 'complete') res(msg.patched);
       else if (msg.type === 'error') rej(new Error(msg.error));
     });
@@ -94,6 +88,11 @@ export function transformAsync(source, patchIds, { onReady, onDone } = {}) {
 }
 
 /** List all available patches. */
-export function listPatches() {
-  return Object.values(allPatches).map(p => ({ id: p.id, name: p.name, description: p.description, defaultEnabled: p.defaultEnabled }));
+export function listPatches(): PatchInfo[] {
+  return (Object.values(allPatches) as Patch[]).map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    defaultEnabled: p.defaultEnabled,
+  }));
 }

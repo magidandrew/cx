@@ -4,21 +4,22 @@
   "description": "Modular, opt-in patches for @anthropic-ai/claude-code applied at runtime via AST transformation",
   "type": "module",
   "bin": {
-    "cx": "./cx",
-    "cx-setup": "./cx-setup"
+    "cx": "./dist/cli.js",
+    "cx-setup": "./dist/cli-setup.js"
   },
   "files": [
-    "cx",
-    "cx-setup",
-    "ast.js",
-    "transform.js",
-    "transform-worker.js",
-    "patch-worker.js",
-    "setup.js",
-    "patches/"
+    "dist/"
   ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
   "dependencies": {
     "acorn": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-code": "*"

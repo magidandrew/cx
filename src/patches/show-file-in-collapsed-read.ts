@@ -6,14 +6,16 @@
  * Instead of just "Searched for 1 pattern", shows:
  *   Searched for 1 pattern ("handleSubmit")
  *
- * Addresses: https://github.com/anthropics/claude-code/issues/21151 (184 👍)
+ * Addresses: https://github.com/anthropics/claude-code/issues/21151 (184 thumbs up)
  *
  * The data is already there — readFilePaths and searchArgs are extracted
  * from the message but only shown during active execution as a hint.
  * This patch adds them to the completed collapsed display.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'show-file-in-collapsed-read',
   name: 'Show File in Collapsed Read',
   description: 'Show file paths and search patterns in collapsed tool display',
@@ -35,7 +37,7 @@ export default {
     // Find the getDisplayPath function: pattern is X(Y):M where it's used near readFilePaths
 
     // Find readFilePaths property access
-    const readFilePathsAccess = findFirst(renderFn, n =>
+    const readFilePathsAccess = findFirst(renderFn, (n: any) =>
       n.type === 'MemberExpression'
       && n.property.type === 'Identifier'
       && n.property.name === 'readFilePaths'
@@ -43,7 +45,7 @@ export default {
     assert(readFilePathsAccess, 'Could not find q.readFilePaths access');
 
     // The assignment: Q = q.readFilePaths — Q is the variable we need
-    const readPathsAssignment = findFirst(renderFn, n =>
+    const readPathsAssignment = findFirst(renderFn, (n: any) =>
       n.type === 'VariableDeclarator'
       && n.init === readFilePathsAccess
     );
@@ -51,13 +53,13 @@ export default {
     const readPathsVar = readPathsAssignment.id.name;
 
     // Find searchArgs variable similarly
-    const searchArgsAccess = findFirst(renderFn, n =>
+    const searchArgsAccess = findFirst(renderFn, (n: any) =>
       n.type === 'MemberExpression'
       && n.property.type === 'Identifier'
       && n.property.name === 'searchArgs'
     );
     assert(searchArgsAccess, 'Could not find q.searchArgs access');
-    const searchArgsAssignment = findFirst(renderFn, n =>
+    const searchArgsAssignment = findFirst(renderFn, (n: any) =>
       n.type === 'VariableDeclarator'
       && n.init === searchArgsAccess
     );
@@ -68,7 +70,7 @@ export default {
     // It's called like: F5(X6) right after readFilePaths is accessed,
     // in the pattern: X!==void 0?F5(X):M
     // The call is on a variable that came from Q?.at(-1)
-    const getDisplayPathCall = findFirst(renderFn, n => {
+    const getDisplayPathCall = findFirst(renderFn, (n: any) => {
       if (n.type !== 'ConditionalExpression') return false;
       // Look for: X!==void 0 ? CALL(X) : Y
       // where CALL is a single-argument function call
@@ -85,16 +87,16 @@ export default {
     // ─── Step 3: Find the React library reference ───
     // Look for createElement calls in the function — C4.default.createElement(...)
     // Find the pattern: X.default.createElement(Y, {key:"read"}, ...)
-    const readElement = findFirst(renderFn, n => {
+    const readElement = findFirst(renderFn, (n: any) => {
       if (n.type !== 'CallExpression') return false;
       // Check for: X.default.createElement
       const callee = n.callee;
       if (callee.type !== 'MemberExpression') return false;
       if (callee.property.name !== 'createElement') return false;
       // Check args for key:"read"
-      return n.arguments.some(arg =>
+      return n.arguments.some((arg: any) =>
         arg.type === 'ObjectExpression'
-        && arg.properties?.some(p =>
+        && arg.properties?.some((p: any) =>
           p.key?.name === 'key' && p.value?.value === 'read'
         )
       );
@@ -112,13 +114,13 @@ export default {
     // ─── Step 5: Find the "Searched for" element and inject search pattern ───
     // Pattern: z6.push(createElement(T, {key:"search"}, M6, " ", createElement(T, {bold:true}, I), " ", I===1?"pattern":"patterns"))
     // We want to add the search pattern text after "patterns")
-    const searchElement = findFirst(renderFn, n => {
+    const searchElement = findFirst(renderFn, (n: any) => {
       if (n.type !== 'CallExpression') return false;
       if (n.callee.type !== 'MemberExpression') return false;
       if (n.callee.property.name !== 'createElement') return false;
-      return n.arguments.some(arg =>
+      return n.arguments.some((arg: any) =>
         arg.type === 'ObjectExpression'
-        && arg.properties?.some(p =>
+        && arg.properties?.some((p: any) =>
           p.key?.name === 'key' && p.value?.value === 'search'
         )
       );
@@ -126,7 +128,7 @@ export default {
     assert(searchElement, 'Could not find createElement with key:"search"');
 
     // Find the push() call that contains this search element
-    const searchPush = findFirst(renderFn, n =>
+    const searchPush = findFirst(renderFn, (n: any) =>
       n.type === 'CallExpression'
       && n.callee.type === 'MemberExpression'
       && n.callee.property.name === 'push'
@@ -176,3 +178,5 @@ export default {
     editor.insertAt(readIfBlock.end, readPathCode);
   },
 };
+
+export default patch;

@@ -7,11 +7,13 @@
  * directly over subtrees.
  */
 
+import type { ASTNode, LiteralValue, SourceEdit, PatchEditor, PatchContext } from './types.js';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Walk (generator, for direct use by patches)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function* walkAST(node) {
+export function* walkAST(node: ASTNode): Generator<ASTNode> {
   if (!node || typeof node !== 'object') return;
   if (node.type) yield node;
   for (const key of Object.keys(node)) {
@@ -32,17 +34,19 @@ export function* walkAST(node) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export class ASTIndex {
-  constructor(ast) {
+  ast: ASTNode;
+  nodesByType = new Map<string, ASTNode[]>();
+  literalsByValue = new Map<LiteralValue, ASTNode[]>();
+  parentMap = new WeakMap<ASTNode, ASTNode>();
+  /** Pre-order flat list — sorted by start position. */
+  allNodes: ASTNode[] = [];
+
+  constructor(ast: ASTNode) {
     this.ast = ast;
-    this.nodesByType = new Map();
-    this.literalsByValue = new Map();
-    this.parentMap = new WeakMap();
-    /** Pre-order flat list — sorted by start position. */
-    this.allNodes = [];
     this._build(ast, null);
   }
 
-  _build(node, parent) {
+  private _build(node: ASTNode | null, parent: ASTNode | null): void {
     if (!node || typeof node !== 'object' || !node.type) return;
 
     this.allNodes.push(node);
@@ -53,8 +57,8 @@ export class ASTIndex {
     byType.push(node);
 
     if (node.type === 'Literal' && node.value != null) {
-      let byVal = this.literalsByValue.get(node.value);
-      if (!byVal) { byVal = []; this.literalsByValue.set(node.value, byVal); }
+      let byVal = this.literalsByValue.get(node.value as LiteralValue);
+      if (!byVal) { byVal = []; this.literalsByValue.set(node.value as LiteralValue, byVal); }
       byVal.push(node);
     }
 
@@ -71,7 +75,7 @@ export class ASTIndex {
 
   // ── Generic queries ────────────────────────────────────────────────────
 
-  findFirst(root, predicate) {
+  findFirst(root: ASTNode, predicate: (n: ASTNode) => boolean): ASTNode | null {
     if (!root || root === this.ast) {
       for (const n of this.allNodes) if (predicate(n)) return n;
       return null;
@@ -85,8 +89,8 @@ export class ASTIndex {
     return null;
   }
 
-  findAll(root, predicate) {
-    const results = [];
+  findAll(root: ASTNode, predicate: (n: ASTNode) => boolean): ASTNode[] {
+    const results: ASTNode[] = [];
     if (!root || root === this.ast) {
       for (const n of this.allNodes) if (predicate(n)) results.push(n);
       return results;
@@ -102,7 +106,7 @@ export class ASTIndex {
 
   // ── Specialized queries (indexed) ──────────────────────────────────────
 
-  findArrayWithConsecutiveStrings(root, str1, str2) {
+  findArrayWithConsecutiveStrings(root: ASTNode, str1: string, str2: string): ASTNode | null {
     for (const lit of this._inRange(this.literalsByValue.get(str1), root)) {
       const parent = this.parentMap.get(lit);
       if (!parent || parent.type !== 'ArrayExpression') continue;
@@ -115,8 +119,9 @@ export class ASTIndex {
     return null;
   }
 
-  findObjectWithStringProps(root, propPairs) {
-    let bestVal = propPairs[0][1], bestCount = Infinity;
+  findObjectWithStringProps(root: ASTNode, propPairs: [string, string][]): ASTNode | null {
+    let bestVal = propPairs[0][1];
+    let bestCount = Infinity;
     for (const [, v] of propPairs) {
       const c = (this.literalsByValue.get(v) || []).length;
       if (c < bestCount) { bestVal = v; bestCount = c; }
@@ -126,7 +131,7 @@ export class ASTIndex {
       if (obj?.type === 'Property') obj = this.parentMap.get(obj);
       if (!obj || obj.type !== 'ObjectExpression') continue;
       if (propPairs.every(([key, value]) =>
-        obj.properties.some(prop => {
+        obj!.properties.some((prop: ASTNode) => {
           if (prop.type !== 'Property') return false;
           const kMatch = (prop.key.type === 'Identifier' && prop.key.name === key) ||
                          (prop.key.type === 'Literal' && prop.key.value === key);
@@ -137,14 +142,14 @@ export class ASTIndex {
     return null;
   }
 
-  findHookCallWithObjectKeys(root, hookName, keys) {
+  findHookCallWithObjectKeys(root: ASTNode, hookName: string, keys: string[]): ASTNode | null {
     for (const node of this._inRange(this.nodesByType.get('CallExpression'), root)) {
       const c = node.callee;
       if (c.type !== 'MemberExpression' || c.property.name !== hookName) continue;
       const firstArg = node.arguments[0];
       if (!firstArg) continue;
       for (const obj of this._inRange(this.nodesByType.get('ObjectExpression'), firstArg)) {
-        if (keys.every(k => obj.properties.some(p =>
+        if (keys.every(k => obj.properties.some((p: ASTNode) =>
           p.type === 'Property' &&
           ((p.key.type === 'Literal' && p.key.value === k) || (p.key.type === 'Identifier' && p.key.name === k))
         ))) return node;
@@ -153,15 +158,15 @@ export class ASTIndex {
     return null;
   }
 
-  findFunctionsContainingStrings(root, ...strings) {
+  findFunctionsContainingStrings(root: ASTNode, ...strings: string[]): ASTNode[] {
     let rarest = strings[0];
     let rarestCount = (this.literalsByValue.get(rarest) || []).length;
     for (let i = 1; i < strings.length; i++) {
       const count = (this.literalsByValue.get(strings[i]) || []).length;
       if (count < rarestCount) { rarest = strings[i]; rarestCount = count; }
     }
-    const seen = new Set();
-    const results = [];
+    const seen = new Set<ASTNode>();
+    const results: ASTNode[] = [];
     for (const lit of this._inRange(this.literalsByValue.get(rarest), root)) {
       const fn = this.enclosingFunction(lit);
       if (!fn || seen.has(fn)) continue;
@@ -173,7 +178,7 @@ export class ASTIndex {
     return results;
   }
 
-  getDestructuredName(objPattern, propKey) {
+  getDestructuredName(objPattern: ASTNode, propKey: string): string | null {
     for (const prop of objPattern.properties) {
       if (prop.type === 'RestElement') continue;
       const k = prop.key;
@@ -187,14 +192,15 @@ export class ASTIndex {
 
   // ── Internal helpers ───────────────────────────────────────────────────
 
-  _inRange(nodes, root) {
+  private _inRange(nodes: ASTNode[] | undefined, root: ASTNode): ASTNode[] {
     if (!nodes) return [];
     if (!root || root === this.ast) return nodes;
     return nodes.filter(n => n.start >= root.start && n.end <= root.end);
   }
 
-  _lowerBound(target) {
-    let lo = 0, hi = this.allNodes.length;
+  private _lowerBound(target: number): number {
+    let lo = 0;
+    let hi = this.allNodes.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
       if (this.allNodes[mid].start < target) lo = mid + 1; else hi = mid;
@@ -203,7 +209,7 @@ export class ASTIndex {
   }
 
   /** Walk up the parent chain to find the nearest ancestor of a given type. */
-  ancestor(node, type) {
+  ancestor(node: ASTNode, type: string): ASTNode | null {
     let current = this.parentMap.get(node);
     while (current) {
       if (current.type === type) return current;
@@ -212,7 +218,7 @@ export class ASTIndex {
     return null;
   }
 
-  enclosingFunction(node) {
+  enclosingFunction(node: ASTNode): ASTNode | null {
     let current = this.parentMap.get(node);
     while (current) {
       if (current.type === 'FunctionDeclaration' || current.type === 'FunctionExpression' || current.type === 'ArrowFunctionExpression') return current;
@@ -226,11 +232,18 @@ export class ASTIndex {
 // Source Editor
 // ═══════════════════════════════════════════════════════════════════════════
 
-export class SourceEditor {
-  constructor() { this.edits = []; }
-  insertAt(pos, text) { this.edits.push({ pos, deleteCount: 0, text }); }
-  replaceRange(start, end, text) { this.edits.push({ pos: start, deleteCount: end - start, text }); }
-  apply(src) {
+export class SourceEditor implements PatchEditor {
+  edits: SourceEdit[] = [];
+
+  insertAt(pos: number, text: string): void {
+    this.edits.push({ pos, deleteCount: 0, text });
+  }
+
+  replaceRange(start: number, end: number, text: string): void {
+    this.edits.push({ pos: start, deleteCount: end - start, text });
+  }
+
+  apply(src: string): string {
     const sorted = [...this.edits].sort((a, b) => b.pos - a.pos);
     let result = src;
     for (const edit of sorted) {
@@ -240,11 +253,15 @@ export class SourceEditor {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Context builder
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
  * Build the standard patch context from source + AST index + editor.
- * Shared by transform.js (sequential) and patch-worker.js (parallel).
+ * Shared by transform.ts (sequential) and workers (parallel).
  */
-export function buildContext(source, index, editor) {
+export function buildContext(source: string, index: ASTIndex, editor: PatchEditor): PatchContext {
   return {
     ast: index.ast,
     source,
@@ -262,11 +279,11 @@ export function buildContext(source, index, editor) {
       findFunctionsContainingStrings: (root, ...strings) => index.findFunctionsContainingStrings(root, ...strings),
       getDestructuredName: (obj, key) => index.getDestructuredName(obj, key),
     },
-    src: node => source.slice(node.start, node.end),
-    assert(cond, msg) {
-      if (!cond) throw new Error(`transform: ${msg}`);
+    src: (node: ASTNode) => source.slice(node.start, node.end),
+    assert(condition: unknown, message: string): void {
+      if (!condition) throw new Error(`transform: ${message}`);
     },
-    getFunctionName(fn) {
+    getFunctionName(fn: ASTNode): string | null {
       if (fn.type === 'FunctionDeclaration' && fn.id) return fn.id.name;
       const before = source.slice(Math.max(0, fn.start - 100), fn.start);
       const m = before.match(/(?:^|[,;{}\s])(\w+)\s*=\s*$/);

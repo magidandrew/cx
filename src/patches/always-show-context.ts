@@ -5,7 +5,7 @@
  * the limit. The built-in TokenWarning only fires within 20k tokens of
  * the threshold — on a 1M context window, that's ~98% full, far too late.
  *
- * Addresses: https://github.com/anthropics/claude-code/issues/18456 (51 👍)
+ * Addresses: https://github.com/anthropics/claude-code/issues/18456 (51 thumbs up)
  *
  * Strategy:
  * 1. Find TokenWarning by its unique "Context low" string
@@ -19,7 +19,9 @@
  * as context fills up.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'always-show-context',
   name: 'Always Show Context',
   description: 'Always display context usage percentage, not just when near limit',
@@ -38,7 +40,7 @@ export default {
       }
     }
     if (!marker) {
-      marker = findFirst(ast, n =>
+      marker = findFirst(ast, (n: any) =>
         n.type === 'TemplateElement' &&
         n.value?.raw?.includes('Context low')
       );
@@ -52,12 +54,12 @@ export default {
     //   if (!isAboveWarningThreshold || suppressWarning) { return null; }
     // Pattern: IfStatement → test: !X || Y, consequent: return null,
     // and it must appear before the "Context low" string.
-    const gate = findFirst(fn, n => {
+    const gate = findFirst(fn, (n: any) => {
       if (n.type !== 'IfStatement' || n.start >= marker.start) return false;
       const t = n.test;
       if (t.type !== 'LogicalExpression' || t.operator !== '||') return false;
       if (t.left.type !== 'UnaryExpression' || t.left.operator !== '!') return false;
-      return findFirst(n.consequent, r =>
+      return findFirst(n.consequent, (r: any) =>
         r.type === 'ReturnStatement' &&
         r.argument?.type === 'Literal' &&
         r.argument.value === null
@@ -78,7 +80,7 @@ export default {
     // Find: isAboveErrorThreshold ? "error" : "warning"
     // Replace "warning" with: isAboveWarningThreshold ? "warning" : void 0
     // This makes text render in default color when context usage is low.
-    const colorTernary = findFirst(fn, n =>
+    const colorTernary = findFirst(fn, (n: any) =>
       n.type === 'ConditionalExpression' &&
       n.consequent.type === 'Literal' && n.consequent.value === 'error' &&
       n.alternate.type === 'Literal' && n.alternate.value === 'warning'
@@ -107,9 +109,9 @@ export default {
     // Edit 4: Change "X% until auto-compact" → "X% context used"
     // The bundle has: reactiveOnlyMode ? `${100-var}% context used` : `${var}% until auto-compact`
     // reactiveOnlyMode is always false, so patch the alternate branch to also show context used.
-    const autocompactTpl = findFirst(fn, n =>
+    const autocompactTpl = findFirst(fn, (n: any) =>
       n.type === 'TemplateLiteral' &&
-      n.quasis.some(q => q.value?.raw?.includes('% until auto-compact'))
+      n.quasis.some((q: any) => q.value?.raw?.includes('% until auto-compact'))
     );
     if (autocompactTpl) {
       const varName = src(autocompactTpl.expressions[0]);
@@ -121,3 +123,5 @@ export default {
     }
   },
 };
+
+export default patch;

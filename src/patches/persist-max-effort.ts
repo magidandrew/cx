@@ -11,7 +11,9 @@
  *   if (q === "low" || q === "medium" || q === "high")
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'persist-max-effort',
   name: 'Persist Max Effort',
   description: 'Save "max" effort to settings so it survives restarts',
@@ -23,10 +25,10 @@ export default {
     // Find the toPersistableEffort function. It's a function whose body has
     // exactly the pattern: q==="low"||q==="medium"||q==="high"
     // This is a unique 3-way string comparison in the bundle.
-    const persistFn = findFirst(ast, n => {
+    const persistFn = findFirst(ast, (n: any) => {
       if (n.type !== 'FunctionDeclaration' && n.type !== 'FunctionExpression' && n.type !== 'ArrowFunctionExpression') return false;
       // Find the LogicalExpression chain: q==="low" || q==="medium" || q==="high"
-      return findFirst(n, inner => {
+      return findFirst(n, (inner: any) => {
         if (inner.type !== 'LogicalExpression' || inner.operator !== '||') return false;
         // The rightmost comparison should be q==="high"
         if (inner.right.type !== 'BinaryExpression') return false;
@@ -42,7 +44,7 @@ export default {
     assert(persistFn, 'Could not find toPersistableEffort function (low||medium||high pattern)');
 
     // Find the "high" literal in the comparison chain
-    const highLiteral = findFirst(persistFn, n => {
+    const highLiteral = findFirst(persistFn, (n: any) => {
       if (n.type !== 'BinaryExpression' || n.operator !== '===') return false;
       return n.right?.type === 'Literal' && n.right.value === 'high';
     });
@@ -57,9 +59,9 @@ export default {
     // Fix ["low","medium","high"] arrays (Zod schema + EFFORT_LEVELS) that also
     // strip "max". Without this, settings.json validation silently drops "max"
     // on read via .catch(undefined).
-    const effortArrays = findAll(ast, n => {
+    const effortArrays = findAll(ast, (n: any) => {
       if (n.type !== 'ArrayExpression' || n.elements.length !== 3) return false;
-      const vals = n.elements.map(e => e?.type === 'Literal' ? e.value : null);
+      const vals = n.elements.map((e: any) => e?.type === 'Literal' ? e.value : null);
       return vals[0] === 'low' && vals[1] === 'medium' && vals[2] === 'high';
     });
     assert(effortArrays.length > 0, 'Could not find ["low","medium","high"] arrays to patch');
@@ -68,3 +70,5 @@ export default {
     }
   },
 };
+
+export default patch;

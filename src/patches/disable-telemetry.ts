@@ -9,7 +9,9 @@
  * 3. Noop 1P event logging init — prevents exporter + retry of old events
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'disable-telemetry',
   name: 'Disable Telemetry',
   description: 'Strip Datadog and 1P analytics calls',
@@ -27,13 +29,13 @@ export default {
     // Marker: object literal with preserved keys "logEvent" + "logEventAsync"
     // passed as sole argument to a call expression.
 
-    const sinkCall = findFirst(ast, n => {
+    const sinkCall = findFirst(ast, (n: any) => {
       if (n.type !== 'CallExpression' || n.arguments.length !== 1) return false;
       const arg = n.arguments[0];
       if (arg.type !== 'ObjectExpression') return false;
       const keys = arg.properties
-        .filter(p => p.type === 'Property')
-        .map(p => p.key.name || p.key.value);
+        .filter((p: any) => p.type === 'Property')
+        .map((p: any) => p.key.name || p.key.value);
       return keys.includes('logEvent') && keys.includes('logEventAsync');
     });
     assert(sinkCall, 'Could not find attachAnalyticsSink({logEvent, logEventAsync})');
@@ -48,8 +50,8 @@ export default {
 
     const ddCandidates = query.findFunctionsContainingStrings(ast, 'DD-API-KEY');
     const flushFns = ddCandidates
-      .filter(fn => fn.params.length === 0)
-      .sort((a, b) => (a.end - a.start) - (b.end - b.start));
+      .filter((fn: any) => fn.params.length === 0)
+      .sort((a: any, b: any) => (a.end - a.start) - (b.end - b.start));
     assert(flushFns.length >= 1, 'Could not find Datadog flushLogs function');
     const flushBody = flushFns[0].body;
     assert(flushBody.type === 'BlockStatement', 'flushLogs: expected block body');
@@ -57,7 +59,7 @@ export default {
 
     // Blank the endpoint URL as extra safety (token is not a plain literal
     // in the bundle, so we target the URL instead).
-    const endpointLit = findFirst(ast, n =>
+    const endpointLit = findFirst(ast, (n: any) =>
       n.type === 'Literal' &&
       n.value === 'https://http-intake.logs.us5.datadoghq.com/api/v2/logs');
     assert(endpointLit, 'Could not find Datadog endpoint URL');
@@ -73,8 +75,8 @@ export default {
     const init1PCandidates = query.findFunctionsContainingStrings(
       ast, 'com.anthropic.claude_code.events');
     const init1PFns = init1PCandidates
-      .filter(fn => fn.params.length === 0)
-      .sort((a, b) => (a.end - a.start) - (b.end - b.start));
+      .filter((fn: any) => fn.params.length === 0)
+      .sort((a: any, b: any) => (a.end - a.start) - (b.end - b.start));
     assert(init1PFns.length >= 1, 'Could not find initialize1PEventLogging');
     const init1PBody = init1PFns[0].body;
     assert(init1PBody.type === 'BlockStatement',
@@ -82,3 +84,5 @@ export default {
     editor.insertAt(init1PBody.start + 1, 'return;');
   },
 };
+
+export default patch;

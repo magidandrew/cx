@@ -5,7 +5,9 @@
  * notification that appears on every startup for npm installs.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'no-npm-warning',
   name: 'No NPM Warning',
   description: 'Suppress the "switched from npm to native installer" nag',
@@ -15,11 +17,11 @@ export default {
     const { findFirst } = find;
 
     // Find the ReturnStatement that returns {key:"npm-deprecation-warning",...}
-    const ret = findFirst(ast, n => {
+    const ret = findFirst(ast, (n: any) => {
       if (n.type !== 'ReturnStatement') return false;
       const arg = n.argument;
       if (!arg || arg.type !== 'ObjectExpression') return false;
-      return arg.properties.some(p =>
+      return arg.properties.some((p: any) =>
         p.type === 'Property' &&
         p.key?.type === 'Identifier' && p.key.name === 'key' &&
         p.value?.type === 'Literal' && p.value.value === 'npm-deprecation-warning');
@@ -30,3 +32,5 @@ export default {
     editor.replaceRange(ret.start, ret.end, 'return null');
   },
 };
+
+export default patch;

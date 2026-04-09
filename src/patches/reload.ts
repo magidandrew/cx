@@ -6,7 +6,9 @@
  * picking up any patch changes while preserving the conversation.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'reload',
   name: 'Ctrl+X Ctrl+R Reload',
   description: 'Reload cx session with Ctrl+X Ctrl+R (re-applies patches, keeps conversation)',
@@ -24,14 +26,14 @@ export default {
 
     const actionsArr = findArrayWithConsecutiveStrings(ast, 'chat:submit', 'chat:newline');
     assert(actionsArr, 'Could not find KEYBINDING_ACTIONS array');
-    const newlineEl = actionsArr.elements.find(e => e.type === 'Literal' && e.value === 'chat:newline');
+    const newlineEl = actionsArr.elements.find((e: any) => e.type === 'Literal' && e.value === 'chat:newline');
     editor.insertAt(newlineEl.end, ',"chat:reload"');
 
     // ── 2. DEFAULT_BINDINGS: bind Ctrl+X Ctrl+R → chat:reload ────────
 
     const bindingsObj = findObjectWithStringProps(ast, [['enter', 'chat:submit'], ['up', 'history:previous']]);
     assert(bindingsObj, 'Could not find DEFAULT_BINDINGS Chat object');
-    const upProp = bindingsObj.properties.find(p => p.type === 'Property' &&
+    const upProp = bindingsObj.properties.find((p: any) => p.type === 'Property' &&
       ((p.key.type === 'Identifier' && p.key.name === 'up') ||
        (p.key.type === 'Literal' && p.key.value === 'up')));
     editor.insertAt(upProp.end, ',"ctrl+x ctrl+r":"chat:reload"');
@@ -44,16 +46,16 @@ export default {
     assert(chatHandlersMemo, 'Could not find chatHandlers useMemo');
     const R = src(chatHandlersMemo.callee.object);
 
-    const handlersObject = findFirst(chatHandlersMemo.arguments[0], n =>
+    const handlersObject = findFirst(chatHandlersMemo.arguments[0], (n: any) =>
       n.type === 'ObjectExpression' &&
-      n.properties.some(p => p.type === 'Property' && p.key.type === 'Literal' && p.key.value === 'chat:undo'));
+      n.properties.some((p: any) => p.type === 'Property' && p.key.type === 'Literal' && p.key.value === 'chat:undo'));
     assert(handlersObject, 'Could not find handlers object in useMemo');
 
     const depsArray = chatHandlersMemo.arguments[1];
     assert(depsArray?.type === 'ArrayExpression', 'Could not find deps array');
 
-    const memoDecl = findFirst(ast, n =>
-      n.type === 'VariableDeclaration' && n.declarations.some(d => d.init === chatHandlersMemo));
+    const memoDecl = findFirst(ast, (n: any) =>
+      n.type === 'VariableDeclaration' && n.declarations.some((d: any) => d.init === chatHandlersMemo));
     assert(memoDecl, 'Could not find VariableDeclaration for chatHandlers useMemo');
 
     // useCallback with empty deps — process.exit(75) never changes
@@ -66,3 +68,5 @@ export default {
     editor.insertAt(lastDep.end, `,__rH`);
   },
 };
+
+export default patch;

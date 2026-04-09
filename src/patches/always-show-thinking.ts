@@ -4,7 +4,7 @@
  * Makes Claude's thinking blocks always display expanded instead of
  * collapsed behind "∴ Thinking (ctrl+o to expand)".
  *
- * Addresses: https://github.com/anthropics/claude-code/issues/8477 (195 👍)
+ * Addresses: https://github.com/anthropics/claude-code/issues/8477 (195 thumbs up)
  *
  * In AssistantThinkingMessage, the gate is:
  *   const shouldShowFullThinking = isTranscriptMode || verbose;
@@ -14,7 +14,9 @@
  * the negated OR gate with `false` so the expanded view always renders.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'always-show-thinking',
   name: 'Always Show Thinking',
   description: 'Show thinking block content inline instead of collapsed',
@@ -40,7 +42,7 @@ export default {
     // Find the gate: if(!(Y||O)) where Y=isTranscriptMode, O=verbose.
     // Structure: IfStatement whose test is UnaryExpression(!) wrapping LogicalExpression(||)
     // This is the FIRST such pattern in the function, appearing before the "∴ Thinking" strings.
-    const gate = findFirst(thinkingFn, n =>
+    const gate = findFirst(thinkingFn, (n: any) =>
       n.type === 'IfStatement'
       && n.test.type === 'UnaryExpression'
       && n.test.operator === '!'
@@ -50,7 +52,7 @@ export default {
     assert(gate, 'Could not find thinking display gate: if(!(X||Y))');
 
     // Verify this is the right gate by checking it appears before the "∴ Thinking" string
-    const firstThinkingLiteral = findFirst(thinkingFn, n =>
+    const firstThinkingLiteral = findFirst(thinkingFn, (n: any) =>
       n.type === 'Literal' && typeof n.value === 'string'
       && n.value.includes('\u2234 Thinking'));
     assert(
@@ -63,3 +65,5 @@ export default {
     editor.replaceRange(gate.test.start, gate.test.end, 'false');
   },
 };
+
+export default patch;

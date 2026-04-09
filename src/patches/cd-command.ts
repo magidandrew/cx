@@ -4,7 +4,7 @@
  * Adds a /cd <path> slash command to change the working directory
  * mid-session without losing conversation context.
  *
- * Addresses: https://github.com/anthropics/claude-code/issues/3473 (54 👍)
+ * Addresses: https://github.com/anthropics/claude-code/issues/3473 (54 thumbs up)
  *
  * AST strategy: find the bundled setCwd function (via its "tengu_shell_set_cwd"
  * telemetry string) and getCwdState (via its named export mapping), then inject
@@ -12,7 +12,9 @@
  * and reports the new working directory.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'cd-command',
   name: '/cd Command',
   description: '/cd <path> — change where bash commands run (same as shell cd, keeps project settings)',
@@ -28,7 +30,7 @@ export default {
       ast, 'tengu_shell_set_cwd',
     );
     assert(setCwdFns.length >= 1, 'Could not find functions with tengu_shell_set_cwd');
-    const setCwdFn = setCwdFns.find(fn =>
+    const setCwdFn = setCwdFns.find((fn: any) =>
       fn.type === 'FunctionDeclaration' && !fn.async);
     assert(setCwdFn, 'Could not find setCwd (sync FunctionDeclaration)');
     const setCwdName = ctx.getFunctionName(setCwdFn);
@@ -37,7 +39,7 @@ export default {
     // ── 2. Find getCwdState via export mapping ───────────────────────
     // The state module exports: getCwdState:()=>XX
     // This is a Property with Identifier key and zero-param ArrowFunction value.
-    const getCwdProp = find.findFirst(ast, n =>
+    const getCwdProp = find.findFirst(ast, (n: any) =>
       n.type === 'Property' &&
       n.key?.type === 'Identifier' && n.key.name === 'getCwdState' &&
       n.value?.type === 'ArrowFunctionExpression' &&
@@ -68,7 +70,7 @@ export default {
     const localVar = assignNode.left.name;
 
     // Find re-export: exportVar = localVar
-    const reExport = find.findFirst(ast, n =>
+    const reExport = find.findFirst(ast, (n: any) =>
       n.type === 'AssignmentExpression' &&
       n.right?.type === 'Identifier' && n.right.name === localVar &&
       n.left?.type === 'Identifier' && n.left.name !== localVar);
@@ -76,10 +78,10 @@ export default {
     const exportVar = reExport.left.name;
 
     // Find the array containing exportVar (COMMANDS has 40+ elements)
-    const commandsArr = find.findFirst(ast, n => {
+    const commandsArr = find.findFirst(ast, (n: any) => {
       if (n.type !== 'ArrayExpression') return false;
       if (n.elements.length < 20) return false;
-      return n.elements.some(el =>
+      return n.elements.some((el: any) =>
         el?.type === 'Identifier' && el.name === exportVar);
     });
     assert(commandsArr, 'Could not find COMMANDS array');
@@ -102,3 +104,5 @@ export default {
     editor.insertAt(lastEl.end, cdCmd);
   },
 };
+
+export default patch;

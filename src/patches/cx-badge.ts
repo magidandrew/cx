@@ -6,7 +6,9 @@
  * When no mode is active, the badge still shows on the footer line.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'cx-badge',
   name: 'CX Badge',
   description: 'Show a persistent "cx" indicator in the prompt footer',
@@ -21,16 +23,16 @@ export default {
 
     // Strategy: find the string "? for shortcuts" — it's inside a JSX element
     // in ModeIndicator. Then find the enclosing function.
-    const shortcutsHint = findFirst(ast, n =>
+    const shortcutsHint = findFirst(ast, (n: any) =>
       n.type === 'Literal' && n.value === '? for shortcuts');
     assert(shortcutsHint, 'Could not find "? for shortcuts" literal');
 
     // Walk up to find the function containing this
-    const modeIndicatorFn = findFirst(ast, node => {
+    const modeIndicatorFn = findFirst(ast, (node: any) => {
       if (node.type !== 'FunctionDeclaration' && node.type !== 'FunctionExpression') return false;
       // Check if the "? for shortcuts" literal is inside this function
       let found = false;
-      const check = n => {
+      const check = (n: any) => {
         if (n === shortcutsHint) { found = true; return; }
         if (found) return;
         for (const key of Object.keys(n)) {
@@ -56,10 +58,10 @@ export default {
 
     // Find the createElement call with height:1 and overflow:"hidden" props
     // This is the final return: <Box height={1} overflow="hidden">
-    const boxWithHeight1 = findFirst(modeIndicatorFn, n => {
+    const boxWithHeight1 = findFirst(modeIndicatorFn, (n: any) => {
       if (n.type !== 'CallExpression') return false;
       // Look for an object argument with height:1 and overflow:"hidden"
-      return n.arguments.some(arg => {
+      return n.arguments.some((arg: any) => {
         if (arg?.type !== 'ObjectExpression') return false;
         let hasHeight = false;
         let hasOverflow = false;
@@ -87,9 +89,9 @@ export default {
     const BoxRef = src(boxWithHeight1.arguments[0]);
 
     // Find the Text component — look for a createElement call with " · " string
-    const separatorCall = findFirst(modeIndicatorFn, n => {
+    const separatorCall = findFirst(modeIndicatorFn, (n: any) => {
       if (n.type !== 'CallExpression') return false;
-      return n.arguments.some(a => a?.type === 'Literal' && a.value === ' · ');
+      return n.arguments.some((a: any) => a?.type === 'Literal' && a.value === ' · ');
     });
     assert(separatorCall, 'Could not find separator " · " createElement');
     const TextRef = src(separatorCall.arguments[0]);
@@ -97,9 +99,9 @@ export default {
     // Insert a CX badge as the first child of the Box.
     // The children start after the props object.
     // Find the props object position
-    const propsArg = boxWithHeight1.arguments.find(a =>
+    const propsArg = boxWithHeight1.arguments.find((a: any) =>
       a?.type === 'ObjectExpression' &&
-      a.properties.some(p => p.key?.name === 'height'));
+      a.properties.some((p: any) => p.key?.name === 'height'));
 
     // Insert right after the props argument (before the first child)
     const insertPos = propsArg.end;
@@ -110,3 +112,5 @@ export default {
     editor.insertAt(insertPos, cxBadge);
   },
 };
+
+export default patch;

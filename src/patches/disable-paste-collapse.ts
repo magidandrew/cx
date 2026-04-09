@@ -5,14 +5,16 @@
  * placeholders. All pasted content is inserted inline so you can review and
  * edit it before submitting.
  *
- * Addresses: https://github.com/anthropics/claude-code/issues/23134 (77 👍)
+ * Addresses: https://github.com/anthropics/claude-code/issues/23134 (77 thumbs up)
  *
  * Strategy: find the paste-collapse condition in onTextPaste() — identified
  * by the call to formatPastedTextRef (Xd8) which contains the stable string
  * literal "Pasted text #" — and replace the guard condition with `false`.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'disable-paste-collapse',
   name: 'Disable Paste Collapse',
   description: 'Show pasted text inline instead of collapsing into [Pasted text #N]',
@@ -22,7 +24,7 @@ export default {
     const { findFirst } = find;
 
     // Find the formatPastedTextRef function by its "Pasted text #" template literal.
-    const fmtFn = findFirst(ast, n =>
+    const fmtFn = findFirst(ast, (n: any) =>
       n.type === 'FunctionDeclaration' &&
       src(n).includes('Pasted text #'));
     assert(fmtFn, 'Could not find formatPastedTextRef function');
@@ -32,10 +34,10 @@ export default {
     // and an if-statement whose consequent calls it.
     // We look for the IfStatement whose consequent block contains a call
     // to fmtName — that's the collapse gate.
-    const collapseIf = findFirst(ast, n => {
+    const collapseIf = findFirst(ast, (n: any) => {
       if (n.type !== 'IfStatement') return false;
       // The consequent must contain a call to fmtName
-      const hasFmtCall = findFirst(n.consequent, c =>
+      const hasFmtCall = findFirst(n.consequent, (c: any) =>
         c.type === 'CallExpression' &&
         c.callee.type === 'Identifier' &&
         c.callee.name === fmtName);
@@ -50,3 +52,5 @@ export default {
     editor.replaceRange(test.start, test.end, 'false');
   },
 };
+
+export default patch;

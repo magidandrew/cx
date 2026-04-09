@@ -10,7 +10,9 @@
  * commands, and resume tips without relying on minified variable names.
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'cx-resume-commands',
   name: 'cx Resume Commands',
   description: 'Show cx instead of claude in resume/continue command hints',
@@ -19,14 +21,14 @@ export default {
     const { ast, editor, find, src, assert } = ctx;
     const { findAll } = find;
 
-    const replacements = [
+    const replacements: [string, string][] = [
       ['claude --continue', 'cx --continue'],
       ['claude --resume', 'cx --resume'],
       ['claude -p --resume', 'cx -p --resume'],
     ];
 
     let changed = 0;
-    const rewrite = (node, text) => {
+    const rewrite = (node: any, text: string) => {
       let next = text;
       for (const [from, to] of replacements) {
         next = next.split(from).join(to);
@@ -37,11 +39,11 @@ export default {
       }
     };
 
-    for (const node of findAll(ast, n => n.type === 'Literal' && typeof n.value === 'string')) {
+    for (const node of findAll(ast, (n: any) => n.type === 'Literal' && typeof n.value === 'string')) {
       rewrite(node, node.value);
     }
 
-    for (const node of findAll(ast, n => n.type === 'TemplateElement' && typeof n.value?.raw === 'string')) {
+    for (const node of findAll(ast, (n: any) => n.type === 'TemplateElement' && typeof n.value?.raw === 'string')) {
       const raw = src(node);
       let nextRaw = raw;
       for (const [from, to] of replacements) {
@@ -56,3 +58,5 @@ export default {
     assert(changed >= 4, `Expected at least 4 resume/continue command rewrites, found ${changed}`);
   },
 };
+
+export default patch;

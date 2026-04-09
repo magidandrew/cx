@@ -22,7 +22,9 @@
  *   3. Tip/help text — so instructions match the new behavior
  */
 
-export default {
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
   id: 'swap-enter-submit',
   name: 'Swap Enter / Meta+Enter',
   description: 'Enter inserts newline, Option/Alt+Enter submits',
@@ -41,7 +43,7 @@ export default {
     ]);
     assert(obj, 'Could not find DEFAULT_BINDINGS object');
 
-    const enterProp = obj.properties.find(p =>
+    const enterProp = obj.properties.find((p: any) =>
       p.type === 'Property' &&
       ((p.key.type === 'Identifier' && p.key.name === 'enter') ||
        (p.key.type === 'Literal' && p.key.value === 'enter')));
@@ -73,33 +75,33 @@ export default {
 
     // Find handleEnter by stable markers. Take the SMALLEST matching
     // function (handleEnter is nested inside useTextInput).
-    const isHandleEnterCandidate = node => {
+    const isHandleEnterCandidate = (node: any) => {
       if (node.type !== 'FunctionDeclaration' && node.type !== 'FunctionExpression') return false;
-      if (!findFirst(node, n => n.type === 'Literal' && n.value === 'Apple_Terminal')) return false;
-      if (!findFirst(node, n =>
+      if (!findFirst(node, (n: any) => n.type === 'Literal' && n.value === 'Apple_Terminal')) return false;
+      if (!findFirst(node, (n: any) =>
         n.type === 'CallExpression' && n.callee.type === 'MemberExpression' &&
         n.callee.property.name === 'backspace')) return false;
-      return findFirst(node, n =>
+      return findFirst(node, (n: any) =>
         n.type === 'LogicalExpression' && n.operator === '||' &&
         n.left.type === 'MemberExpression' && n.left.property.name === 'meta' &&
         n.right.type === 'MemberExpression' && n.right.property.name === 'shift') !== null;
     };
     const candidates = findAll(ast, isHandleEnterCandidate);
     assert(candidates.length >= 1, 'Could not find handleEnter function');
-    candidates.sort((a, b) => (a.end - a.start) - (b.end - b.start));
+    candidates.sort((a: any, b: any) => (a.end - a.start) - (b.end - b.start));
     const handleEnterFn = candidates[0];
 
     // Discover minified variable names
 
     // key variable: from key.meta || key.shift
-    const metaOrShift = findFirst(handleEnterFn, n =>
+    const metaOrShift = findFirst(handleEnterFn, (n: any) =>
       n.type === 'LogicalExpression' && n.operator === '||' &&
       n.left.type === 'MemberExpression' && n.left.property.name === 'meta' &&
       n.right.type === 'MemberExpression' && n.right.property.name === 'shift');
     const keyVar = src(metaOrShift.left.object);
 
     // if-statement that tests meta||shift
-    const metaShiftIf = findFirst(handleEnterFn, n => {
+    const metaShiftIf = findFirst(handleEnterFn, (n: any) => {
       if (n.type !== 'IfStatement') return false;
       const t = n.test;
       return t.type === 'LogicalExpression' && t.operator === '||' &&
@@ -109,11 +111,11 @@ export default {
     assert(metaShiftIf, 'Could not find if-statement for meta||shift');
 
     // cursor variable: from cursor.insert('\n') (where cursor is a plain Identifier)
-    const isNewlineArg = (n) =>
+    const isNewlineArg = (n: any) =>
       (n.type === 'Literal' && n.value === '\n') ||
       (n.type === 'TemplateLiteral' && n.expressions.length === 0 &&
        n.quasis.length === 1 && n.quasis[0].value.cooked === '\n');
-    const cursorInserts = findAll(handleEnterFn, n =>
+    const cursorInserts = findAll(handleEnterFn, (n: any) =>
       n.type === 'CallExpression' &&
       n.callee.type === 'MemberExpression' &&
       n.callee.object.type === 'Identifier' &&
@@ -132,9 +134,9 @@ export default {
     const onSubmitCallSrc = src(lastStmt.expression);
 
     // Apple Terminal if-block
-    const appleTerminalIf = findFirst(handleEnterFn, n => {
+    const appleTerminalIf = findFirst(handleEnterFn, (n: any) => {
       if (n.type !== 'IfStatement') return false;
-      return findFirst(n.test, t => t.type === 'Literal' && t.value === 'Apple_Terminal') !== null;
+      return findFirst(n.test, (t: any) => t.type === 'Literal' && t.value === 'Apple_Terminal') !== null;
     });
 
     // ── Apply edits (editor applies in reverse position order) ───────
@@ -161,14 +163,14 @@ export default {
 
     // ── Patch 3: Tip text ────────────────────────────────────────────
 
-    const shiftEnterTip = findFirst(ast, n =>
+    const shiftEnterTip = findFirst(ast, (n: any) =>
       n.type === 'Literal' && n.value === 'Press Shift+Enter to send a multi-line message');
     if (shiftEnterTip) {
       editor.replaceRange(shiftEnterTip.start, shiftEnterTip.end,
         '"Press Option+Enter to submit your message"');
     }
 
-    const optionEnterTip = findFirst(ast, n =>
+    const optionEnterTip = findFirst(ast, (n: any) =>
       n.type === 'Literal' && n.value === 'Press Option+Enter to send a multi-line message');
     if (optionEnterTip) {
       editor.replaceRange(optionEnterTip.start, optionEnterTip.end,
@@ -179,10 +181,12 @@ export default {
 
     for (const val of ['shift + ⏎ for newline', '\\⏎ for newline',
                         'backslash (\\) + return (⏎) for newline']) {
-      const nodes = findAll(ast, n => n.type === 'Literal' && n.value === val);
+      const nodes = findAll(ast, (n: any) => n.type === 'Literal' && n.value === val);
       for (const node of nodes) {
         editor.replaceRange(node.start, node.end, '"option + ⏎ to send"');
       }
     }
   },
 };
+
+export default patch;

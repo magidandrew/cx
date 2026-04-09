@@ -1,5 +1,8 @@
 node_modules/
+dist/
 .cache/
 .cx-patches.json
 .cx-pid
 .DS_Store
+cc-source/*
+!cc-source/README.md
