@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.3] — 2026-04-10
+
+### Fixes
+
+- Patch config now lives at `~/.config/cx/patches.json` instead of inside the installed package directory, so it survives `npm i -g claude-code-extensions`. Previously every reinstall wiped the config and dropped you back into first-run setup.
+
 ## [0.2.2] — 2026-04-10
 
 ### New patches

@@ -16,10 +16,10 @@ import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { listPatches } from './transform.js';
+import { CONFIG_PATH, ensureConfigDir } from './config-path.js';
 import type { CxConfig } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolve(__dirname, '..', '.cx-patches.json');
 const CACHE_DIR = resolve(__dirname, '..', '.cache');
 
 const DIM = '\x1b[2m', BOLD = '\x1b[1m', GREEN = '\x1b[32m', RESET = '\x1b[0m';
@@ -32,6 +32,7 @@ function loadConfig(): Record<string, boolean> {
 }
 
 function saveConfig(patches: Record<string, boolean>): void {
+  ensureConfigDir();
   writeFileSync(CONFIG_PATH, JSON.stringify({ patches }, null, 2) + '\n');
   invalidateCache();
 }

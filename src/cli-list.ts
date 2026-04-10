@@ -4,13 +4,9 @@
  */
 
 import { existsSync, readFileSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
 import { listPatches } from './transform.js';
+import { CONFIG_PATH } from './config-path.js';
 import type { CxConfig, PatchInfo } from './types.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolve(__dirname, '..', '.cx-patches.json');
 
 function loadConfig(): CxConfig | null {
   if (!existsSync(CONFIG_PATH)) return null;

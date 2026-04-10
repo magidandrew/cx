@@ -9,10 +9,10 @@ import { readFileSync, writeFileSync, existsSync, rmSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { listPatches } from './transform.js';
+import { CONFIG_PATH, ensureConfigDir } from './config-path.js';
 import type { CxConfig, PatchInfo } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolve(__dirname, '..', '.cx-patches.json');
 
 // ── Config persistence ────────────────────────────────────────────────────
 
@@ -22,6 +22,7 @@ function loadConfig(): CxConfig {
 }
 
 function saveConfig(patches: Record<string, boolean>): void {
+  ensureConfigDir();
   writeFileSync(CONFIG_PATH, JSON.stringify({ patches }, null, 2) + '\n');
 }
 
@@ -383,7 +384,7 @@ export default function setup(opts?: SetupOptions): Promise<void> {
         // Delete cache so next run re-transforms
         try { rmSync(resolve(__dirname, '..', '.cache'), { recursive: true, force: true }); } catch { /* ok */ }
 
-        console.log(`  ${GREEN}✔${RESET} Config saved to .cx-patches.json\n`);
+        console.log(`  ${GREEN}✔${RESET} Config saved to ~/.config/cx/patches.json\n`);
         const enabled = allPatchList.filter((_, i) => states[i]).map(p => p.id);
         const disabled = allPatchList.filter((_, i) => !states[i]).map(p => p.id);
         if (enabled.length) console.log(`  ${GREEN}enabled${RESET}  ${enabled.join(', ')}`);

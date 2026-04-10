@@ -18,10 +18,10 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { transformAsync, listPatches, resolveConflicts } from './transform.js';
 import { runVersionCheck } from './version-check.js';
+import { CONFIG_PATH } from './config-path.js';
 import type { CxConfig, PatchInfo } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolve(__dirname, '..', '.cx-patches.json');
 const cacheDir = resolve(__dirname, '..', '.cache');
 const cachedCliPath = resolve(cacheDir, 'cli.mjs');
 const metaPath = resolve(cacheDir, 'meta.json');
