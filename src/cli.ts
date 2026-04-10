@@ -17,6 +17,7 @@ import { execSync, spawn as nodeSpawn } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { transformAsync, listPatches, resolveConflicts } from './transform.js';
+import { runVersionCheck } from './version-check.js';
 import type { CxConfig, PatchInfo } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -192,6 +193,12 @@ function reloadArgs(original: string[]): string[] {
   }
   return result;
 }
+
+// Built-in, always-on: check npm for a newer cx and print an upgrade
+// hint if one is known. Non-blocking — prints from cache, refreshes
+// the cache in the background. Only runs on the initial startup, not
+// on reload.
+runVersionCheck();
 
 const userArgs = process.argv.slice(2);
 let isReload = false;
