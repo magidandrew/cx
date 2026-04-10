@@ -15,4 +15,4 @@ Claude Code is great. But some things can't be configured with settings alone:
 - **Hot reload** — Change patches, tweak config, update Claude Code — press `Ctrl+X Ctrl+R` and the session restarts with fresh patches. Your conversation continues via `--continue`.
 - **Quiet mode** — No spinner tips, no feedback surveys, no npm-to-native-installer nag.
 
-See the [full patches list](/patches) for everything cx can do.
+See the [full patches list](../patches.md) for everything cx can do.
