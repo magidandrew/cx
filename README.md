@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/public/cx-logo.svg" alt="cx logo" width="140">
+</p>
+
 # cx — Claude Code Extensions
 
 [![npm](https://img.shields.io/npm/v/claude-code-extensions)](https://www.npmjs.com/package/claude-code-extensions)

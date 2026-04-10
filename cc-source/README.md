@@ -8,9 +8,13 @@ Gitignored. Only this README is tracked.
 
 ## Getting it
 
-The source was extracted from npm sourcemaps and people have posted it to GitHub. Search "claude code source" and you'll find repos to clone. Be careful what you download.
+The source was extracted from npm sourcemaps and posted to GitHub. One mirror:
+
+- [yasasbanukaofficial/claude-code](https://github.com/yasasbanukaofficial/claude-code)
 
 Clone into this directory:
 ```sh
-git clone https://github.com/<user>/<repo> cc-source
+git clone https://github.com/yasasbanukaofficial/claude-code cc-source
 ```
+
+See the [Claude source](https://cx.worms.coffee/guide/how-it-works#claude-code-source) section of the docs for more.

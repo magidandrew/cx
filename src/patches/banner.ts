@@ -24,6 +24,13 @@ const patch: Patch = {
     const { ast, editor, find, index, src, assert } = ctx;
     const { findFirst } = find;
 
+    // OSC 8 terminal hyperlink wrapping "x.com/wormcoffee" → https://x.com/wormcoffee.
+    // Sequence: ESC ] 8 ; ; URL BEL TEXT ESC ] 8 ; ; BEL
+    // \\u001B / \\u0007 survive the template literal to become \u001B / \u0007
+    // in the injected JS source, which parses to the real ESC/BEL control chars.
+    const linkedHandle =
+      '\\u001B]8;;https://x.com/wormcoffee\\u0007x.com/wormcoffee\\u001B]8;;\\u0007';
+
     // ── Condensed layout: createElement(T, {bold:true}, "Claude Code") ──
     // Use literal index to find "Claude Code", then walk up to the createElement call.
 
@@ -42,7 +49,7 @@ const patch: Patch = {
     const textLiteral = boldTextCall.arguments.find((a: any) =>
       a.type === 'Literal' && a.value === 'Claude Code');
     editor.replaceRange(textLiteral.start, textLiteral.end,
-      `"Claude Code Extensions (cx) v${version} by x.com/@wormcoffee"`);
+      `"Claude Code Extensions (cx) v${version} by ${linkedHandle}"`);
 
     // ── Star-the-repo line in the condensed layout ──
     // The column Box has children: I (title), B (model), R (cwd), g, F
@@ -117,7 +124,7 @@ const patch: Patch = {
     }
     if (titleCall) {
       editor.replaceRange(titleCall.arguments[0].start, titleCall.arguments[0].end,
-        `"Claude Code Extensions (cx) v${version} by x.com/@wormcoffee"`);
+        `"Claude Code Extensions (cx) v${version} by ${linkedHandle}"`);
     }
   },
 };

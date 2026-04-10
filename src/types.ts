@@ -78,6 +78,14 @@ export interface Patch {
   name: string;
   description: string;
   defaultEnabled?: boolean;
+  /**
+   * Ids of other patches this one cannot coexist with (they edit the
+   * same source region and would corrupt the bundle if both applied).
+   * If both a patch and something it conflicts with are enabled, the
+   * transform resolves by dropping the LOSER — i.e. the patch that
+   * declares the conflict keeps itself and removes the other.
+   */
+  conflictsWith?: string[];
   apply(ctx: PatchContext): void;
 }
 
@@ -86,6 +94,7 @@ export interface PatchInfo {
   name: string;
   description: string;
   defaultEnabled?: boolean;
+  conflictsWith?: string[];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

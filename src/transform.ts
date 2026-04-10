@@ -20,16 +20,48 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Patch resolution
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Resolve declared conflicts: if patch A declares conflictsWith: [B]
+ * and both are in the enabled list, drop B. The patch that declared
+ * the conflict wins — it's the "newer" or "superseding" one.
+ *
+ * Exported so the async CLI path (which bypasses resolvePatches and
+ * passes patch ids straight to the worker) can apply the same rules.
+ */
+export function resolveConflicts(ids: string[]): string[] {
+  const available = Object.values(allPatches) as Patch[];
+  const byId = new Map(available.map(p => [p.id, p]));
+  const enabled = new Set(ids);
+  const drop = new Set<string>();
+  for (const id of ids) {
+    const patch = byId.get(id);
+    if (!patch?.conflictsWith?.length) continue;
+    for (const otherId of patch.conflictsWith) {
+      if (enabled.has(otherId) && !drop.has(id)) {
+        drop.add(otherId);
+        process.stderr.write(
+          `\x1b[2mcx: "${id}" conflicts with "${otherId}" — dropping "${otherId}"\x1b[0m\n`
+        );
+      }
+    }
+  }
+  return ids.filter(id => !drop.has(id));
+}
+
 function resolvePatches(only: string[] | null, exclude: string[] | null): Patch[] {
   const available = Object.values(allPatches) as Patch[];
+  let resolved: Patch[];
   if (only) {
-    return only.map(id => {
+    resolved = only.map(id => {
       const p = available.find(p => p.id === id);
       if (!p) throw new Error(`Unknown patch: "${id}". Available: ${available.map(p => p.id).join(', ')}`);
       return p;
     });
+  } else {
+    resolved = available.filter(p => !exclude?.includes(p.id));
   }
-  return available.filter(p => !exclude?.includes(p.id));
+  const keepIds = new Set(resolveConflicts(resolved.map(p => p.id)));
+  return resolved.filter(p => keepIds.has(p.id));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,5 +126,6 @@ export function listPatches(): PatchInfo[] {
     name: p.name,
     description: p.description,
     defaultEnabled: p.defaultEnabled,
+    conflictsWith: p.conflictsWith,
   }));
 }

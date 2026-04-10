@@ -1,0 +1,30 @@
+:root {
+  --vp-c-brand-1: #D97757;
+  --vp-c-brand-2: #C5644A;
+  --vp-c-brand-3: #D97757;
+  --vp-c-brand-soft: rgba(217, 119, 87, 0.14);
+
+  --vp-c-brand-light: #E08A6E;
+  --vp-c-brand-lighter: #E89C83;
+  --vp-c-brand-dark: #C5644A;
+  --vp-c-brand-darker: #B55337;
+
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-bg: #D97757;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: #C5644A;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-active-bg: #B55337;
+
+  --vp-home-hero-name-color: #D97757;
+}
+
+.dark {
+  --vp-c-brand-1: #E89C83;
+  --vp-c-brand-2: #E08A6E;
+  --vp-c-brand-3: #D97757;
+  --vp-c-brand-soft: rgba(217, 119, 87, 0.16);
+}

@@ -6,6 +6,9 @@ hero:
   name: "cx"
   text: "Claude Code Extensions"
   tagline: Modular, opt-in patches applied at runtime via AST transformation. The original claude tool is never modified.
+  image:
+    src: /cx-logo.svg
+    alt: cx logo
   actions:
     - theme: brand
       text: Get started

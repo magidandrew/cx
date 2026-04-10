@@ -12,11 +12,11 @@
  *   cx-reload  — signal a running cx instance to reload Claude
  */
 
-import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync, unlinkSync, readdirSync } from 'fs';
 import { execSync, spawn as nodeSpawn } from 'child_process';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { transformAsync, listPatches } from './transform.js';
+import { transformAsync, listPatches, resolveConflicts } from './transform.js';
 import type { CxConfig, PatchInfo } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,11 +38,13 @@ function loadConfig(): CxConfig | null {
 function getEnabledPatches(): string[] {
   const config = loadConfig();
   const all = listPatches();
-  if (!config?.patches) return all.map(p => p.id);
-  return all.filter((p: PatchInfo) => {
-    if (p.id in config.patches) return config.patches[p.id] !== false;
-    return p.defaultEnabled !== false;
-  }).map(p => p.id);
+  const enabled = !config?.patches
+    ? all.map(p => p.id)
+    : all.filter((p: PatchInfo) => {
+        if (p.id in config.patches) return config.patches[p.id] !== false;
+        return p.defaultEnabled !== false;
+      }).map(p => p.id);
+  return resolveConflicts(enabled);
 }
 
 
@@ -73,10 +75,30 @@ if (!cliPath || !existsSync(cliPath)) {
 
 // ── Cache ────────────────────────────────────────────────────────────────
 
+/**
+ * Max mtime across every file in src/patches (dev) or dist/patches (npm).
+ * Folded into the cache key so editing a patch source automatically
+ * invalidates the cached cli.mjs — otherwise users hit stale patches
+ * whenever the enabled list stays the same but a patch body changes.
+ */
+function patchesMtime(): number {
+  const patchesDir = resolve(__dirname, 'patches');
+  let maxMtime = 0;
+  try {
+    for (const entry of readdirSync(patchesDir)) {
+      if (entry === 'index.js' || entry === 'index.ts') continue;
+      if (!entry.endsWith('.js') && !entry.endsWith('.ts')) continue;
+      const m = statSync(resolve(patchesDir, entry)).mtimeMs;
+      if (m > maxMtime) maxMtime = m;
+    }
+  } catch { /* fall through with 0 — never invalidates less than before */ }
+  return maxMtime;
+}
+
 async function ensureCache(): Promise<void> {
   const enabled = getEnabledPatches();
   const stat = statSync(cliPath!);
-  const key = `${stat.size}:${stat.mtimeMs}:${[...enabled].sort().join(',')}`;
+  const key = `${stat.size}:${stat.mtimeMs}:${patchesMtime()}:${[...enabled].sort().join(',')}`;
 
   let valid = false;
   if (existsSync(cachedCliPath) && existsSync(metaPath)) {
