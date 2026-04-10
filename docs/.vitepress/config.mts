@@ -54,6 +54,7 @@ export default defineConfig({
               { text: 'Disable Telemetry', link: '/patches/disable-telemetry' },
               { text: 'Random Clawd Color', link: '/patches/random-clawd' },
               { text: 'CX Badge', link: '/patches/cx-badge' },
+              { text: 'Anthropic Status Banner', link: '/patches/anthropic-status-banner' },
               { text: 'cx Resume Commands', link: '/patches/cx-resume-commands' },
               { text: '/cd Command', link: '/patches/cd-command' },
               { text: 'Attribution Banner', link: '/patches/banner' },

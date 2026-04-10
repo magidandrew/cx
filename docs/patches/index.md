@@ -23,6 +23,7 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | `disable-telemetry` | [Disable Telemetry](./disable-telemetry) | Strip Datadog and 1P analytics calls | on | `*` |
 | `random-clawd` | [Random Clawd Color](./random-clawd) | Randomize the Clawd mascot color on each startup | on | `*` |
 | `cx-badge` | [CX Badge](./cx-badge) | Show a persistent "cx" indicator in the prompt footer | on | `*` |
+| `anthropic-status-banner` | [Anthropic Status Banner](./anthropic-status-banner) | Warn in the footer when status.claude.com reports issues affecting Claude Code | on | `*` |
 | `cx-resume-commands` | [cx Resume Commands](./cx-resume-commands) | Show `cx` instead of `claude` in resume/continue command hints | on | `*` |
 | `cd-command` | [/cd Command](./cd-command) | `/cd <path>` — change where bash commands run (same as shell `cd`, keeps project settings) | on | `*` |
 | `banner` | [Attribution Banner](./banner) | Show "@wormcoffee" on the Claude Code title line | on | `*` |
