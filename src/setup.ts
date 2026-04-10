@@ -34,18 +34,30 @@ interface Group {
 
 const groups: Group[] = [
   { label: 'Display', ids: [
-    'always-show-thinking', 'disable-paste-collapse',
-    'disable-text-truncation', 'show-file-in-collapsed-read',
-    'cx-badge', 'cx-resume-commands', 'random-clawd',
-  ]},
-  { label: 'Input', ids: [
-    'queue', 'swap-enter-submit', 'reload',
+    'always-show-thinking',
+    'always-show-context',
+    'session-usage',
+    'show-file-in-collapsed-read',
+    'disable-paste-collapse',
+    'disable-text-truncation',
   ]},
   { label: 'Spinner', ids: [
-    'no-tips', 'simple-spinner',
+    'simple-spinner', 'no-tips',
   ]},
-  { label: 'Behavior', ids: [
-    'persist-max-effort', 'no-npm-warning', 'no-feedback',
+  { label: 'Input', ids: [
+    'queue', 'swap-enter-submit', 'cut-to-clipboard', 'reload',
+  ]},
+  { label: 'Commands', ids: [
+    'delete-sessions', 'cd-command', 'cx-resume-commands',
+  ]},
+  { label: 'Model', ids: [
+    'persist-max-effort', 'granular-effort',
+  ]},
+  { label: 'Quiet mode', ids: [
+    'no-feedback', 'no-npm-warning', 'no-attribution', 'disable-telemetry',
+  ]},
+  { label: 'Branding', ids: [
+    'cx-badge', 'random-clawd',
   ]},
 ];
 
@@ -78,6 +90,8 @@ let cursor = 0;
 let dirty = false;
 let resetPending = false;
 let firstRunMode = false;
+let searchMode = false;
+let query = '';
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
@@ -96,6 +110,77 @@ const BG_HIGHLIGHT = `${ESC}[48;5;236m`;
 
 const maxId = Math.max(...allPatchList.map(p => p.id.length));
 
+// ── Vim-magic search ──────────────────────────────────────────────────────
+//
+// `/` drops you into a live regex filter that behaves like vim's default
+// `magic` mode:
+//   .  *  ^  $  [ ]           → metacharacters (same as JS)
+//   \( \) \+ \? \| \{ \} \= → metacharacters (mapped to JS counterparts)
+//   ( ) + ? | { }             → literal, auto-escaped for JS
+//   \< \>                      → word boundary (JS `\b`)
+//   everything else            → literal
+// The pattern is compiled once per keystroke, cached into `queryRegex`,
+// and tested against each patch's id, name, and description. If the
+// in-flight pattern is not yet a valid regex (e.g. user typed `\(` but
+// hasn't closed the group), we fall back to a literal substring match
+// so the list doesn't blink to empty mid-typing. Match is case-insensitive.
+
+let queryRegex: RegExp | null = null;
+
+function vimMagicToJsRegex(pattern: string): string {
+  let out = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '\\' && i + 1 < pattern.length) {
+      const next = pattern[i + 1];
+      // Vim meta sequences → JS meta
+      if ('()+?|{}'.includes(next)) { out += next; i++; continue; }
+      if (next === '<' || next === '>') { out += '\\b'; i++; continue; }
+      if (next === '=') { out += '?'; i++; continue; }
+      // Pass through (\s, \d, \w, \., \\, etc.)
+      out += '\\' + next;
+      i++;
+      continue;
+    }
+    // Unescaped literals that are JS metas need escaping
+    if ('()+?|{}'.includes(c)) { out += '\\' + c; continue; }
+    out += c;
+  }
+  return out;
+}
+
+/** Update the cached regex from the current `query`. Falls back to a
+ *  literal substring match on any parse error. */
+function setQuery(next: string): void {
+  query = next;
+  if (!next) { queryRegex = null; return; }
+  try {
+    queryRegex = new RegExp(vimMagicToJsRegex(next), 'i');
+  } catch {
+    const literal = next.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try { queryRegex = new RegExp(literal, 'i'); }
+    catch { queryRegex = null; }
+  }
+}
+
+/** Is patch index `i` visible under the current query? */
+function isVisible(i: number): boolean {
+  if (!queryRegex) return true;
+  const p = allPatchList[i];
+  return queryRegex.test(p.id) || queryRegex.test(p.name) || queryRegex.test(p.description);
+}
+
+/** If cursor is on a filtered-out row, slide it to the nearest visible one. */
+function ensureCursorVisible(): void {
+  if (allPatchList.length === 0 || isVisible(cursor)) return;
+  for (let i = cursor + 1; i < allPatchList.length; i++) {
+    if (isVisible(i)) { cursor = i; return; }
+  }
+  for (let i = cursor - 1; i >= 0; i--) {
+    if (isVisible(i)) { cursor = i; return; }
+  }
+}
+
 function render(): void {
   const rows = process.stdout.rows || 24;
   const lines: string[] = [];
@@ -112,11 +197,19 @@ function render(): void {
     lines.push(`  ${BOLD}${CYAN}cx setup${RESET}  ${DIM}— toggle patches on/off${RESET}`);
   }
 
-  // Patch list with section headers
+  // Patch list with section headers. Section headers are deferred until
+  // at least one visible patch follows them, so filtering doesn't leave
+  // empty-section labels stranded.
+  let pendingSection: string | null = null;
+  let visibleCount = 0;
   for (let i = 0; i < allPatchList.length; i++) {
-    if (sectionStarts[i]) {
+    if (sectionStarts[i]) pendingSection = sectionStarts[i];
+    if (!isVisible(i)) continue;
+
+    if (pendingSection) {
       lines.push('');
-      lines.push(`  ${DIM}${sectionStarts[i]}${RESET}`);
+      lines.push(`  ${DIM}${pendingSection}${RESET}`);
+      pendingSection = null;
     }
 
     const p = allPatchList[i];
@@ -132,14 +225,25 @@ function render(): void {
 
     patchLineIndex[i] = lines.length;
     lines.push(`${pointer}${checkbox} ${name}${pad}${desc}${RESET}`);
+    visibleCount++;
+  }
+
+  if (visibleCount === 0 && query) {
+    lines.push('');
+    lines.push(`  ${DIM}no patches match "${query}"${RESET}`);
   }
 
   // Footer
   lines.push('');
-  if (resetPending) {
+  if (searchMode) {
+    lines.push(`  ${CYAN}/${RESET}${query}${DIM}█${RESET}    ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}enter${RESET} save  ${DIM}esc${RESET} exit find`);
+  } else if (resetPending) {
     lines.push(`  ${YELLOW}Press r again to reset all patches to defaults${RESET}`);
   } else {
-    let footer = `  ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}r${RESET} reset  ${DIM}enter${RESET} save  ${DIM}esc${RESET} cancel`;
+    let footer = `  ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}/${RESET} find  ${DIM}r${RESET} reset  ${DIM}enter${RESET} save  ${DIM}esc${RESET} cancel`;
+    if (query) {
+      footer += `    ${CYAN}/${query}${RESET}`;
+    }
     if (dirty) {
       footer += `    ${YELLOW}● unsaved${RESET}`;
     }
@@ -156,7 +260,7 @@ function render(): void {
 
   // Scrolling — reserve 2 lines for indicators
   const usable = Math.max(1, rows - 2);
-  const target = patchLineIndex[cursor];
+  const target = patchLineIndex[cursor] ?? 0;
   let scrollTop = Math.max(0, target - Math.floor(usable / 2));
   scrollTop = Math.min(scrollTop, lines.length - usable);
 
@@ -199,7 +303,7 @@ export default function setup(opts?: SetupOptions): Promise<void> {
     render();
 
     const onKey = (key: string) => {
-      // Ctrl+C
+      // Ctrl+C — always quits, regardless of mode
       if (key === '\x03') {
         cleanup();
         if (isFirstRun) {
@@ -215,7 +319,107 @@ export default function setup(opts?: SetupOptions): Promise<void> {
         process.exit(0);
       }
 
-      // ESC
+      // ── Keys that work the same in both modes ──────────────
+      // Arrows, Space, and Enter stay live inside find mode so
+      // there's no "commit" step — the filter just sits on top
+      // of normal navigation.
+
+      // Arrow up — previous visible row
+      if (key === '\x1b[A') {
+        for (let i = cursor - 1; i >= 0; i--) {
+          if (isVisible(i)) { cursor = i; break; }
+        }
+        if (resetPending) resetPending = false;
+        render();
+        return;
+      }
+
+      // Arrow down — next visible row
+      if (key === '\x1b[B') {
+        for (let i = cursor + 1; i < allPatchList.length; i++) {
+          if (isVisible(i)) { cursor = i; break; }
+        }
+        if (resetPending) resetPending = false;
+        render();
+        return;
+      }
+
+      // Space — toggle current visible row
+      if (key === ' ') {
+        if (isVisible(cursor)) {
+          states[cursor] = !states[cursor];
+          dirty = true;
+        }
+        if (resetPending) resetPending = false;
+        render();
+        return;
+      }
+
+      // Enter — save and exit
+      if (key === '\r' || key === '\n') {
+        const patches: Record<string, boolean> = {};
+        for (let i = 0; i < allPatchList.length; i++) {
+          patches[allPatchList[i].id] = states[i];
+        }
+        saveConfig(patches);
+        cleanup();
+
+        // Delete cache so next run re-transforms
+        try { rmSync(resolve(__dirname, '..', '.cache'), { recursive: true, force: true }); } catch { /* ok */ }
+
+        console.log(`  ${GREEN}✔${RESET} Config saved to .cx-patches.json\n`);
+        const enabled = allPatchList.filter((_, i) => states[i]).map(p => p.id);
+        const disabled = allPatchList.filter((_, i) => !states[i]).map(p => p.id);
+        if (enabled.length) console.log(`  ${GREEN}enabled${RESET}  ${enabled.join(', ')}`);
+        if (disabled.length) console.log(`  ${DIM}disabled${RESET} ${disabled.join(', ')}`);
+
+        if (isFirstRun) {
+          console.log('');
+          done();
+          return;
+        }
+        console.log(`\n  Run ${BOLD}cx${RESET} to start with these patches.\n`);
+        process.exit(0);
+      }
+
+      // ── Find mode ──────────────────────────────────────────
+      // Printable keys become query input. Backspace edits the
+      // query. Esc drops out of find mode and clears the filter —
+      // a second Esc (in normal mode) exits the app.
+      if (searchMode) {
+        if (key === '\x1b') {
+          searchMode = false;
+          setQuery('');
+          render();
+          return;
+        }
+        if (key === '\x7f' || key === '\b') {
+          setQuery(query.slice(0, -1));
+          ensureCursorVisible();
+          render();
+          return;
+        }
+        // Printable ASCII — append to query
+        if (key.length === 1 && key >= ' ' && key <= '~') {
+          setQuery(query + key);
+          ensureCursorVisible();
+          render();
+          return;
+        }
+        // Ignore unhandled escape sequences while filtering
+        return;
+      }
+
+      // ── Normal mode ────────────────────────────────────────
+
+      // / — enter find mode
+      if (key === '/') {
+        searchMode = true;
+        render();
+        return;
+      }
+
+      // ESC / q — quit
       if (key === '\x1b' || key === 'q') {
         cleanup();
         if (isFirstRun) {
@@ -255,47 +459,19 @@ export default function setup(opts?: SetupOptions): Promise<void> {
         resetPending = false;
       }
 
-      // Arrow up / k
-      if (key === '\x1b[A' || key === 'k') {
-        cursor = Math.max(0, cursor - 1);
-      }
-
-      // Arrow down / j
-      if (key === '\x1b[B' || key === 'j') {
-        cursor = Math.min(allPatchList.length - 1, cursor + 1);
-      }
-
-      // Space — toggle
-      if (key === ' ') {
-        states[cursor] = !states[cursor];
-        dirty = true;
-      }
-
-      // Enter — save and exit
-      if (key === '\r' || key === '\n') {
-        const patches: Record<string, boolean> = {};
-        for (let i = 0; i < allPatchList.length; i++) {
-          patches[allPatchList[i].id] = states[i];
+      // k — prev visible row (vim-style, normal mode only so j/k
+      // stay available as search characters inside find mode)
+      if (key === 'k') {
+        for (let i = cursor - 1; i >= 0; i--) {
+          if (isVisible(i)) { cursor = i; break; }
         }
-        saveConfig(patches);
-        cleanup();
+      }
 
-        // Delete cache so next run re-transforms
-        try { rmSync(resolve(__dirname, '..', '.cache'), { recursive: true, force: true }); } catch { /* ok */ }
-
-        console.log(`  ${GREEN}✔${RESET} Config saved to .cx-patches.json\n`);
-        const enabled = allPatchList.filter((_, i) => states[i]).map(p => p.id);
-        const disabled = allPatchList.filter((_, i) => !states[i]).map(p => p.id);
-        if (enabled.length) console.log(`  ${GREEN}enabled${RESET}  ${enabled.join(', ')}`);
-        if (disabled.length) console.log(`  ${DIM}disabled${RESET} ${disabled.join(', ')}`);
-
-        if (isFirstRun) {
-          console.log('');
-          done();
-          return;
+      // j — next visible row
+      if (key === 'j') {
+        for (let i = cursor + 1; i < allPatchList.length; i++) {
+          if (isVisible(i)) { cursor = i; break; }
         }
-        console.log(`\n  Run ${BOLD}cx${RESET} to start with these patches.\n`);
-        process.exit(0);
       }
 
       render();
