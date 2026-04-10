@@ -18,3 +18,4 @@ export { default as noTips } from './no-tips.js';
 export { default as simpleSpinner } from './simple-spinner.js';
 export { default as sessionTimer } from './session-timer.js';
 export { default as noFeedback } from './no-feedback.js';
+export { default as sessionExport } from './session-export.js';
