@@ -26,7 +26,7 @@ const patch: Patch = {
   id: 'cut-to-clipboard',
   name: 'Cut prompt to clipboard (Alt+X)',
   description: 'Option/Alt+X copies the current prompt text to the system clipboard and clears the input',
-  defaultEnabled: false,
+  defaultEnabled: true,
 
   apply(ctx) {
     const { ast, index, editor, find, query, src, assert } = ctx;

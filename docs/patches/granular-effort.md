@@ -2,7 +2,7 @@
 
 > Replace the `/model` effort picker with a 1-9 numeric slider.
 
-**ID** `granular-effort` · **Default** off · **Compatible** `*` · [Source](https://github.com/magidandrew/cx/blob/main/src/patches/granular-effort.ts)
+**ID** `granular-effort` · **Default** on · **Compatible** `*` · [Source](https://github.com/magidandrew/cx/blob/main/src/patches/granular-effort.ts)
 
 ## What it does
 

@@ -50,7 +50,6 @@ All `claude` arguments pass through: `cx --model sonnet -p "hello"` works exactl
 |---|---|:---:|
 | `queue` | `Ctrl+Q` true message queue — buffer instructions to run after the current turn (vs. Enter, which steers mid-response) | on |
 | `always-show-thinking` | Show thinking block content inline | on |
-| `always-show-context` | Always display context usage percentage | on |
 | `show-file-in-collapsed-read` | Show file paths in collapsed tool display | on |
 | `disable-paste-collapse` | Show pasted text inline instead of collapsing | on |
 | `persist-max-effort` | Save "max" effort to settings so it survives restarts | on |

@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.2] — 2026-04-10
+
+### New patches
+
+- **auto-rename-first-message** — Persist the Haiku-generated first-message title to disk so `/resume` and the terminal tab show it immediately, no manual `/rename` required.
+- **rename-random-color** — Reroll the prompt-bar color to a random pick from the eight built-in agent colors every time you run `/rename`.
+- **per-session-effort** — Stop the cross-terminal effort clobber: `/effort` still writes to `settings.json` (last-write-wins for new sessions), but running instances no longer overwrite each other's in-memory `effortValue`.
+
+### Changes
+
+- **session-usage**, **cut-to-clipboard**, **granular-effort** — now default-on.
+- **always-show-context** removed. Its behavior is fully covered by `session-usage`.
+- `cx` writes a trailing newline on exit so zsh stops showing its `%` partial-line marker after Ctrl-C tears down the TUI.
+- `cx setup` truncates long patch descriptions to fit the terminal width and removes stray newlines so the scroll region and `↑ more` / `↓ more` indicators stay accurate.
+
 ## [0.2.1] — 2026-04-10
 
 - Point the npm `homepage` field at [cx.worms.coffee](https://cx.worms.coffee) so the npm sidebar links to the docs site instead of the GitHub README.

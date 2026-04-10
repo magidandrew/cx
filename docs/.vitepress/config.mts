@@ -50,7 +50,6 @@ export default defineConfig({
             items: [
               { text: 'Ctrl+Q Message Queue', link: '/patches/queue' },
               { text: 'Always Show Thinking', link: '/patches/always-show-thinking' },
-              { text: 'Always Show Context', link: '/patches/always-show-context' },
               { text: 'Show File in Collapsed Read', link: '/patches/show-file-in-collapsed-read' },
               { text: 'Disable Paste Collapse', link: '/patches/disable-paste-collapse' },
               { text: 'Disable Long-Text Truncation', link: '/patches/disable-text-truncation' },
@@ -65,6 +64,7 @@ export default defineConfig({
               { text: 'CX Badge', link: '/patches/cx-badge' },
               { text: 'Anthropic Status Banner', link: '/patches/anthropic-status-banner' },
               { text: 'cx Resume Commands', link: '/patches/cx-resume-commands' },
+              { text: 'Auto /rename on First Message', link: '/patches/auto-rename-first-message' },
               { text: '/cd Command', link: '/patches/cd-command' },
               { text: 'Attribution Banner', link: '/patches/banner' },
               { text: 'Swap Enter / Meta+Enter', link: '/patches/swap-enter-submit' },
@@ -72,6 +72,7 @@ export default defineConfig({
               { text: 'Simple Spinner', link: '/patches/simple-spinner' },
               { text: 'Granular Effort Slider', link: '/patches/granular-effort' },
               { text: 'Session Usage', link: '/patches/session-usage' },
+              { text: 'Random Color on /rename', link: '/patches/rename-random-color' },
             ],
           },
         ],

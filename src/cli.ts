@@ -223,5 +223,8 @@ while (true) {
     continue;
   }
 
+  // Ensure the final line ends with a newline so zsh doesn't show its
+  // "partial line" `%` marker after the TUI tears down on Ctrl-C.
+  process.stdout.write('\n');
   process.exit(code ?? 0);
 }

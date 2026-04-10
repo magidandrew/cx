@@ -35,7 +35,6 @@ interface Group {
 const groups: Group[] = [
   { label: 'Display', ids: [
     'always-show-thinking',
-    'always-show-context',
     'session-usage',
     'show-file-in-collapsed-read',
     'disable-paste-collapse',
@@ -183,8 +182,16 @@ function ensureCursorVisible(): void {
 
 function render(): void {
   const rows = process.stdout.rows || 24;
+  const cols = process.stdout.columns || 80;
   const lines: string[] = [];
   const patchLineIndex: number[] = [];
+
+  // Max description width. The patch line prefix is `6 + maxId` visible
+  // chars (2 pointer + 1 checkbox + 1 space + id + 2 pad), leaving the
+  // rest for the description. Truncate with an ellipsis so lines never
+  // wrap — if they wrapped, each array entry would take >1 visual row
+  // and the scroll math (which assumes 1:1) would be wrong.
+  const maxDescWidth = Math.max(10, cols - (6 + maxId) - 1);
 
   // Header
   lines.push('');
@@ -221,7 +228,10 @@ function render(): void {
     const checkbox = on ? `${GREEN}✔${RESET}${bg}` : `${DIM}○${RESET}${bg}`;
     const name = sel ? `${BOLD}${WHITE}${p.id}${RESET}${bg}` : p.id;
     const pad = ' '.repeat(maxId - p.id.length + 2);
-    const desc = `${DIM}${p.description}${RESET}`;
+    const descText = p.description.length > maxDescWidth
+      ? p.description.slice(0, Math.max(1, maxDescWidth - 1)) + '…'
+      : p.description;
+    const desc = `${DIM}${descText}${RESET}`;
 
     patchLineIndex[i] = lines.length;
     lines.push(`${pointer}${checkbox} ${name}${pad}${desc}${RESET}`);
@@ -252,9 +262,14 @@ function render(): void {
 
   const prefix = CLEAR + HIDE_CURSOR;
 
+  // No trailing newline in either path below — if the content ends
+  // exactly on the bottom row, a final `\n` triggers a 1-line scroll
+  // and pushes the top line (including the `↑ more` indicator) out
+  // of view.
+
   // Everything fits — render as-is
   if (lines.length <= rows) {
-    process.stdout.write(prefix + lines.join('\n') + '\n');
+    process.stdout.write(prefix + lines.join('\n'));
     return;
   }
 
@@ -268,7 +283,8 @@ function render(): void {
   const top = scrollTop > 0 ? `  ${DIM}↑ more${RESET}` : '';
   const bottom = scrollTop + usable < lines.length ? `  ${DIM}↓ more${RESET}` : '';
 
-  process.stdout.write(prefix + top + '\n' + visible.join('\n') + '\n' + bottom + '\n');
+  // Exactly `rows` lines joined by `rows - 1` newlines.
+  process.stdout.write(prefix + [top, ...visible, bottom].join('\n'));
 }
 
 // ── Input handling ────────────────────────────────────────────────────────

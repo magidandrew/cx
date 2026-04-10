@@ -16,10 +16,6 @@
  * Claude.ai subscription, etc.) the "X% session used · " prefix is
  * omitted and only context usage is shown.
  *
- * This patch supersedes always-show-context — both patches edit the
- * same TokenWarning label template and will collide if enabled at the
- * same time. Pick one.
- *
  * Strategy:
  * 1. Locate TokenWarning via its unique "Context low" string.
  * 2. Resolve the minified name of getRawUtilization() by following the
@@ -44,11 +40,7 @@ const patch: Patch = {
   id: 'session-usage',
   name: 'Session Usage',
   description: "Show '25% session used · 15% context used' (flashes reset time every 5s)",
-  // Off by default because it edits the same TokenWarning template as
-  // always-show-context — the transform will auto-resolve the conflict
-  // (dropping always-show-context) if a user enables both.
-  defaultEnabled: false,
-  conflictsWith: ['always-show-context'],
+  defaultEnabled: true,
 
   apply(ctx) {
     const { ast, editor, find, index, assert, src } = ctx;

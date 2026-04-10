@@ -2,7 +2,7 @@
 
 > `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input.
 
-**ID** `cut-to-clipboard` · **Default** off · **Compatible** `*` · [Source](https://github.com/magidandrew/cx/blob/main/src/patches/cut-to-clipboard.ts)
+**ID** `cut-to-clipboard` · **Default** on · **Compatible** `*` · [Source](https://github.com/magidandrew/cx/blob/main/src/patches/cut-to-clipboard.ts)
 
 ## What it does
 

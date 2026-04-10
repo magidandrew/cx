@@ -9,13 +9,15 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | Patch | Name | Description | Default | Compatible |
 | --- | --- | --- | :---: | --- |
 | `queue` | [Ctrl+Q Message Queue](./queue) | Queue messages with `Ctrl+Q` to run sequentially after the current turn | on | `*` |
+| `cut-to-clipboard` | [Cut prompt to clipboard (Alt+X)](./cut-to-clipboard) | `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input | on | `*` |
+| `reload` | [Ctrl+X Ctrl+R Reload](./reload) | Reload the cx session — re-applies patches and keeps the conversation | on | `*` |
 | `always-show-thinking` | [Always Show Thinking](./always-show-thinking) | Show thinking block content inline instead of collapsed | on | `*` |
-| `always-show-context` | [Always Show Context](./always-show-context) | Always display context usage percentage, not just when near the limit | on | `*` |
+| `session-usage` | [Session Usage](./session-usage) | Always show `"25% session used · 15% context used"` | on | `*` |
 | `show-file-in-collapsed-read` | [Show File in Collapsed Read](./show-file-in-collapsed-read) | Show file paths and search patterns in collapsed tool display | on | `*` |
 | `disable-paste-collapse` | [Disable Paste Collapse](./disable-paste-collapse) | Show pasted text inline instead of collapsing into `[Pasted text #N]` | on | `*` |
 | `disable-text-truncation` | [Disable Long-Text Truncation](./disable-text-truncation) | Show long input inline instead of collapsing into `[...Truncated text #N]` | on | `*` |
 | `persist-max-effort` | [Persist Max Effort](./persist-max-effort) | Save "max" effort to settings so it survives restarts | on | `*` |
-| `reload` | [Ctrl+X Ctrl+R Reload](./reload) | Reload the cx session — re-applies patches and keeps the conversation | on | `*` |
+| `granular-effort` | [Granular Effort Slider](./granular-effort) | Replace the `/model` effort picker with a 1-9 numeric slider | on | `*` |
 | `no-tips` | [No Tips](./no-tips) | Hide spinner tips | on | `*` |
 | `no-feedback` | [No Feedback Prompts](./no-feedback) | Remove feedback survey prompts | on | `*` |
 | `no-npm-warning` | [No NPM Warning](./no-npm-warning) | Suppress the "switched from npm to native installer" nag | on | `*` |
@@ -25,13 +27,12 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | `cx-badge` | [CX Badge](./cx-badge) | Show a persistent "cx" indicator in the prompt footer | on | `*` |
 | `anthropic-status-banner` | [Anthropic Status Banner](./anthropic-status-banner) | Warn in the footer when status.claude.com reports issues affecting Claude Code | on | `*` |
 | `cx-resume-commands` | [cx Resume Commands](./cx-resume-commands) | Show `cx` instead of `claude` in resume/continue command hints | on | `*` |
+| `auto-rename-first-message` | [Auto /rename on First Message](./auto-rename-first-message) | Persist an auto-generated session title on the first user message so /resume and the terminal tab reflect it without typing /rename | on | `*` |
 | `cd-command` | [/cd Command](./cd-command) | `/cd <path>` — change where bash commands run (same as shell `cd`, keeps project settings) | on | `*` |
 | `banner` | [Attribution Banner](./banner) | Show "@wormcoffee" on the Claude Code title line | on | `*` |
 | `swap-enter-submit` | [Swap Enter / Meta+Enter](./swap-enter-submit) | Enter inserts a newline, Option/Alt+Enter submits | off | `*` |
-| `cut-to-clipboard` | [Cut prompt to clipboard (Alt+X)](./cut-to-clipboard) | `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input | off | `*` |
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
-| `granular-effort` | [Granular Effort Slider](./granular-effort) | Replace the `/model` effort picker with a 1-9 numeric slider | off | `*` |
-| `session-usage` | [Session Usage](./session-usage) | Always show `"25% session used · 15% context used"` | off | `*` |
+| `rename-random-color` | [Random Color on /rename](./rename-random-color) | Randomize the prompt-bar color each time you run /rename | off | `*` |
 
 ## Toggling patches
 

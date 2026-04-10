@@ -37,7 +37,7 @@ const patch: Patch = {
   id: 'granular-effort',
   name: 'Granular Effort Slider',
   description: 'Replace /model effort picker with a 1-9 numeric slider',
-  defaultEnabled: false,
+  defaultEnabled: true,
 
   apply(ctx) {
     const { ast, editor, find, src, assert } = ctx;
