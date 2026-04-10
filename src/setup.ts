@@ -35,8 +35,8 @@ interface Group {
 const groups: Group[] = [
   { label: 'Display', ids: [
     'always-show-thinking', 'disable-paste-collapse',
-    'show-file-in-collapsed-read', 'cx-badge',
-    'cx-resume-commands', 'random-clawd',
+    'disable-text-truncation', 'show-file-in-collapsed-read',
+    'cx-badge', 'cx-resume-commands', 'random-clawd',
   ]},
   { label: 'Input', ids: [
     'queue', 'swap-enter-submit', 'reload',

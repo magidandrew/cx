@@ -10,6 +10,7 @@ export { default as cxResumeCommands } from './cx-resume-commands.js';
 export { default as reload } from './reload.js';
 export { default as swapEnterSubmit } from './swap-enter-submit.js';
 export { default as disablePasteCollapse } from './disable-paste-collapse.js';
+export { default as disableTextTruncation } from './disable-text-truncation.js';
 export { default as alwaysShowContext } from './always-show-context.js';
 export { default as cdCommand } from './cd-command.js';
 export { default as disableTelemetry } from './disable-telemetry.js';
