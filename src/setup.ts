@@ -45,7 +45,7 @@ const groups: Group[] = [
     'no-tips', 'simple-spinner',
   ]},
   { label: 'Behavior', ids: [
-    'persist-max-effort', 'no-npm-warning',
+    'persist-max-effort', 'no-npm-warning', 'no-feedback',
   ]},
 ];
 

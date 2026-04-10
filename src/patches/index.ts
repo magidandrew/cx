@@ -17,3 +17,4 @@ export { default as noAttribution } from './no-attribution.js';
 export { default as noTips } from './no-tips.js';
 export { default as simpleSpinner } from './simple-spinner.js';
 export { default as sessionTimer } from './session-timer.js';
+export { default as noFeedback } from './no-feedback.js';
