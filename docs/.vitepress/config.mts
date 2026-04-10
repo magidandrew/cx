@@ -61,6 +61,7 @@ export default defineConfig({
               { text: 'Cut prompt to clipboard', link: '/patches/cut-to-clipboard' },
               { text: 'Simple Spinner', link: '/patches/simple-spinner' },
               { text: 'Granular Effort Slider', link: '/patches/granular-effort' },
+              { text: 'Session Usage', link: '/patches/session-usage' },
             ],
           },
         ],

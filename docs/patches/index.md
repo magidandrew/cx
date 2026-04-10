@@ -30,6 +30,7 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | `cut-to-clipboard` | [Cut prompt to clipboard (Alt+X)](./cut-to-clipboard) | `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input | off | `*` |
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
 | `granular-effort` | [Granular Effort Slider](./granular-effort) | Replace the `/model` effort picker with a 1-9 numeric slider | off | `*` |
+| `session-usage` | [Session Usage](./session-usage) | Always show `"25% session used · 15% context used"` | off | `*` |
 
 ## Toggling patches
 

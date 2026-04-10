@@ -14,6 +14,7 @@ export { default as disablePasteCollapse } from './disable-paste-collapse.js';
 export { default as disableTextTruncation } from './disable-text-truncation.js';
 export { default as cutToClipboard } from './cut-to-clipboard.js';
 export { default as alwaysShowContext } from './always-show-context.js';
+export { default as sessionUsage } from './session-usage.js';
 export { default as cdCommand } from './cd-command.js';
 export { default as disableTelemetry } from './disable-telemetry.js';
 export { default as noAttribution } from './no-attribution.js';
