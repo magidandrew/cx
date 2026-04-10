@@ -73,6 +73,7 @@ const states: boolean[] = allPatchList.map(p =>
 );
 let cursor = 0;
 let dirty = false;
+let firstRunMode = false;
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
@@ -98,7 +99,14 @@ function render(): void {
 
   // Header
   lines.push('');
-  lines.push(`  ${BOLD}${CYAN}cx setup${RESET}  ${DIM}— toggle patches on/off${RESET}`);
+  if (firstRunMode) {
+    lines.push(`  ${BOLD}${CYAN}Welcome to cx${RESET}  ${DIM}— Claude Code Extensions${RESET}`);
+    lines.push(`  ${DIM}These patches will be applied to Claude Code at runtime.${RESET}`);
+    lines.push(`  ${DIM}Press Enter to proceed with defaults, or toggle patches with Space.${RESET}`);
+    lines.push(`  ${DIM}You can always change this later by running ${RESET}${BOLD}cx setup${RESET}${DIM}.${RESET}`);
+  } else {
+    lines.push(`  ${BOLD}${CYAN}cx setup${RESET}  ${DIM}— toggle patches on/off${RESET}`);
+  }
 
   // Patch list with section headers
   for (let i = 0; i < allPatchList.length; i++) {
@@ -155,74 +163,119 @@ function render(): void {
 
 function cleanup(): void {
   process.stdout.write(SHOW_CURSOR + CLEAR);
+  process.stdout.removeListener('resize', render);
   process.stdin.setRawMode(false);
   process.stdin.pause();
 }
 
-export default function setup(): void {
+export interface SetupOptions {
+  /** When true, show a welcome header and return instead of exiting. */
+  firstRun?: boolean;
+}
+
+export default function setup(opts?: SetupOptions): Promise<void> {
+  const isFirstRun = opts?.firstRun ?? false;
+  firstRunMode = isFirstRun;
+
   if (!process.stdin.isTTY) {
     console.error('cx setup requires an interactive terminal.');
     process.exit(1);
   }
 
-  process.stdin.setRawMode(true);
-  process.stdin.resume();
-  process.stdin.setEncoding('utf8');
+  return new Promise<void>((resolveSetup) => {
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
 
-  process.stdout.on('resize', render);
-  render();
-
-  process.stdin.on('data', (key: string) => {
-    // Ctrl+C
-    if (key === '\x03') {
-      cleanup();
-      process.exit(0);
-    }
-
-    // ESC
-    if (key === '\x1b' || key === 'q') {
-      cleanup();
-      console.log('  Cancelled — no changes saved.\n');
-      process.exit(0);
-    }
-
-    // Arrow up / k
-    if (key === '\x1b[A' || key === 'k') {
-      cursor = Math.max(0, cursor - 1);
-    }
-
-    // Arrow down / j
-    if (key === '\x1b[B' || key === 'j') {
-      cursor = Math.min(allPatchList.length - 1, cursor + 1);
-    }
-
-    // Space — toggle
-    if (key === ' ') {
-      states[cursor] = !states[cursor];
-      dirty = true;
-    }
-
-    // Enter — save and exit
-    if (key === '\r' || key === '\n') {
-      const patches: Record<string, boolean> = {};
-      for (let i = 0; i < allPatchList.length; i++) {
-        patches[allPatchList[i].id] = states[i];
-      }
-      saveConfig(patches);
-      cleanup();
-
-      // Delete cache so next run re-transforms
-      try { rmSync(resolve(__dirname, '..', '.cache'), { recursive: true, force: true }); } catch { /* ok */ }
-
-      console.log(`  ${GREEN}✔${RESET} Config saved to .cx-patches.json\n`);
-      const enabled = allPatchList.filter((_, i) => states[i]).map(p => p.id);
-      const disabled = allPatchList.filter((_, i) => !states[i]).map(p => p.id);
-      if (enabled.length) console.log(`  ${GREEN}enabled${RESET}  ${enabled.join(', ')}`);
-      if (disabled.length) console.log(`  ${DIM}disabled${RESET} ${disabled.join(', ')}`);
-      console.log(`\n  Run ${BOLD}cx${RESET} to start with these patches.\n`);
-      process.exit(0);
-    }
-
+    process.stdout.on('resize', render);
     render();
+
+    const onKey = (key: string) => {
+      // Ctrl+C
+      if (key === '\x03') {
+        cleanup();
+        if (isFirstRun) {
+          // Save defaults and continue
+          const patches: Record<string, boolean> = {};
+          for (let i = 0; i < allPatchList.length; i++) {
+            patches[allPatchList[i].id] = states[i];
+          }
+          saveConfig(patches);
+          done();
+          return;
+        }
+        process.exit(0);
+      }
+
+      // ESC
+      if (key === '\x1b' || key === 'q') {
+        cleanup();
+        if (isFirstRun) {
+          // Save defaults and continue
+          const patches: Record<string, boolean> = {};
+          for (let i = 0; i < allPatchList.length; i++) {
+            patches[allPatchList[i].id] = states[i];
+          }
+          saveConfig(patches);
+          console.log(`  ${DIM}Using default patches.${RESET}\n`);
+          done();
+          return;
+        }
+        console.log('  Cancelled — no changes saved.\n');
+        process.exit(0);
+      }
+
+      // Arrow up / k
+      if (key === '\x1b[A' || key === 'k') {
+        cursor = Math.max(0, cursor - 1);
+      }
+
+      // Arrow down / j
+      if (key === '\x1b[B' || key === 'j') {
+        cursor = Math.min(allPatchList.length - 1, cursor + 1);
+      }
+
+      // Space — toggle
+      if (key === ' ') {
+        states[cursor] = !states[cursor];
+        dirty = true;
+      }
+
+      // Enter — save and exit
+      if (key === '\r' || key === '\n') {
+        const patches: Record<string, boolean> = {};
+        for (let i = 0; i < allPatchList.length; i++) {
+          patches[allPatchList[i].id] = states[i];
+        }
+        saveConfig(patches);
+        cleanup();
+
+        // Delete cache so next run re-transforms
+        try { rmSync(resolve(__dirname, '..', '.cache'), { recursive: true, force: true }); } catch { /* ok */ }
+
+        console.log(`  ${GREEN}✔${RESET} Config saved to .cx-patches.json\n`);
+        const enabled = allPatchList.filter((_, i) => states[i]).map(p => p.id);
+        const disabled = allPatchList.filter((_, i) => !states[i]).map(p => p.id);
+        if (enabled.length) console.log(`  ${GREEN}enabled${RESET}  ${enabled.join(', ')}`);
+        if (disabled.length) console.log(`  ${DIM}disabled${RESET} ${disabled.join(', ')}`);
+
+        if (isFirstRun) {
+          console.log('');
+          done();
+          return;
+        }
+        console.log(`\n  Run ${BOLD}cx${RESET} to start with these patches.\n`);
+        process.exit(0);
+      }
+
+      render();
+    };
+
+    process.stdin.on('data', onKey);
+
+    function done(): void {
+      process.stdin.removeListener('data', onKey);
+      resolveSetup();
+    }
   });
 }
