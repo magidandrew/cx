@@ -41,6 +41,9 @@ const groups: Group[] = [
   { label: 'Input', ids: [
     'queue', 'swap-enter-submit', 'reload',
   ]},
+  { label: 'Spinner', ids: [
+    'no-tips', 'simple-spinner',
+  ]},
   { label: 'Behavior', ids: [
     'persist-max-effort', 'no-npm-warning',
   ]},

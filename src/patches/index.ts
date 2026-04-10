@@ -15,3 +15,4 @@ export { default as cdCommand } from './cd-command.js';
 export { default as disableTelemetry } from './disable-telemetry.js';
 export { default as noAttribution } from './no-attribution.js';
 export { default as noTips } from './no-tips.js';
+export { default as simpleSpinner } from './simple-spinner.js';
