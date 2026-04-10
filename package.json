@@ -1,6 +1,6 @@
 {
   "name": "claude-code-extensions",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Modular, opt-in patches for @anthropic-ai/claude-code applied at runtime via AST transformation",
   "type": "module",
   "bin": {
@@ -46,6 +46,7 @@
     "type": "git",
     "url": "https://github.com/magidandrew/cx"
   },
+  "homepage": "https://cx.worms.coffee",
   "license": "MIT",
   "engines": {
     "node": ">=18"

@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.1] — 2026-04-10
+
+- Point the npm `homepage` field at [cx.worms.coffee](https://cx.worms.coffee) so the npm sidebar links to the docs site instead of the GitHub README.
+
 ## [0.2.0] — 2026-04-10
 
 ### New patches
