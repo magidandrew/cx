@@ -42,7 +42,7 @@ const groups: Group[] = [
     'queue', 'swap-enter-submit', 'reload',
   ]},
   { label: 'Behavior', ids: [
-    'persist-max-effort', 'no-npm-warning',
+    'persist-max-effort', 'no-npm-warning', 'session-export',
   ]},
 ];
 
