@@ -4,5 +4,6 @@ dist/
 .cx-patches.json
 .cx-pid
 .DS_Store
+.claude/
 cc-source/*
 !cc-source/README.md
