@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.4] — 2026-04-10
+
+### Fixes
+
+- **Version check** now surfaces new releases within minutes instead of up to 24 hours. The old 24h cache meant fresh publishes often weren't shown for a full day after they landed on npm. Cache TTL dropped to 10 minutes, and on a stale cache we now block up to 500ms to refresh before printing — so the upgrade banner appears on the very first run after a publish, not one run later.
+- Version-check state moved from the in-package `.cache/` dir (wiped on every `npm i -g`) to `~/.config/cx/cache/version-check.json`. Installing an older version no longer loses the "newer exists" knowledge, and the cache is now shared across node versions managed by fnm.
+
+### Internal
+
+- Hardened the version-check path end to end: shape-validated cache reads, atomic temp+rename writes, clock-skew-aware freshness checks, and single-settle guards on the fetch promise. Every failure mode (corrupt cache, disk full, registry timeout, stderr torn down) degrades to "print nothing" instead of crashing cx.
+
 ## [0.2.3] — 2026-04-10
 
 ### Fixes

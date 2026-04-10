@@ -195,10 +195,10 @@ function reloadArgs(original: string[]): string[] {
 }
 
 // Built-in, always-on: check npm for a newer cx and print an upgrade
-// hint if one is known. Non-blocking — prints from cache, refreshes
-// the cache in the background. Only runs on the initial startup, not
-// on reload.
-runVersionCheck();
+// hint if one is known. Cache TTL 10m; blocks up to 500ms on a stale
+// cache to refresh, then falls back to the cached value. Only runs on
+// the initial startup, not on reload.
+await runVersionCheck();
 
 const userArgs = process.argv.slice(2);
 let isReload = false;
