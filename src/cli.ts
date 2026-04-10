@@ -78,14 +78,20 @@ if (sub === 'list') {
 }
 
 if (sub === 'setup') {
-  await import('./setup.js');
+  const { default: setup } = await import('./setup.js');
+  await setup();
   process.exit(0);
 }
 
 // ── First run ────────────────────────────────────────────────────────────
 
 if (!existsSync(CONFIG_PATH)) {
-  process.stderr.write('\x1b[2mcx: first run — all patches enabled. run cx setup to configure.\x1b[0m\n');
+  if (process.stdin.isTTY) {
+    const { default: setup } = await import('./setup.js');
+    await setup({ firstRun: true });
+  } else {
+    process.stderr.write('\x1b[2mcx: first run — all patches enabled. run cx setup to configure.\x1b[0m\n');
+  }
 }
 
 // ── Locate cli.js ────────────────────────────────────────────────────────
