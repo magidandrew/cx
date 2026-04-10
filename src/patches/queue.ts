@@ -213,6 +213,86 @@ const patch: Patch = {
       n.right.type === 'Identifier' && n.right.name === targetModeVar);
     const cbParam = dqamCallback.params[0].name;
     editor.insertAt(modeComparison.end, `&&(${cbParam}.priority??"next")===__p`);
+
+    // ── Patch 5: "queued ❯" marker on Ctrl+Q messages ─────────────────
+    // HighlightedThinkingText renders each user message with `❯ text`.
+    // Only commands enqueued via Ctrl+Q (priority="later") should get the
+    // "queued" prefix — not regular Enter submissions that briefly pass
+    // through the queue with priority="next". Since priority isn't in the
+    // QueuedMessageContext, we cross-reference the command queue by text:
+    // if isQueued AND a "later" command matches this message's text.
+
+    // Find useCommandQueue — `function fl(){return X.useSyncExternalStore(id,id)}`
+    const useCommandQueueFn = findFirst(ast, (node: any) => {
+      if (node.type !== 'FunctionDeclaration' || node.params.length !== 0) return false;
+      if (!node.body || node.body.type !== 'BlockStatement' || node.body.body.length !== 1) return false;
+      const stmt = node.body.body[0];
+      if (stmt.type !== 'ReturnStatement' || !stmt.argument) return false;
+      const call = stmt.argument;
+      if (call.type !== 'CallExpression' || call.callee.type !== 'MemberExpression') return false;
+      if (call.callee.property.name !== 'useSyncExternalStore') return false;
+      if (call.arguments.length !== 2) return false;
+      return call.arguments.every((a: any) => a.type === 'Identifier');
+    });
+    assert(useCommandQueueFn, 'Could not find useCommandQueue function');
+    const useQueueName = useCommandQueueFn.id.name;
+
+    // Find HighlightedThinkingText — function that references both
+    // `X.pointer` (figures.pointer) and `Y.isQueued` (queue context).
+    const highlightedTextCandidates = findAll(ast, (node: any) => {
+      if (node.type !== 'FunctionDeclaration' && node.type !== 'FunctionExpression') return false;
+      if (node.params.length !== 1) return false;
+      const hasPointer = findFirst(node, (n: any) =>
+        n.type === 'MemberExpression' &&
+        n.property.type === 'Identifier' &&
+        n.property.name === 'pointer' &&
+        n.object.type === 'Identifier') !== null;
+      if (!hasPointer) return false;
+      return findFirst(node, (n: any) =>
+        n.type === 'MemberExpression' &&
+        n.property.type === 'Identifier' &&
+        n.property.name === 'isQueued') !== null;
+    });
+    assert(highlightedTextCandidates.length === 1,
+      `Expected 1 HighlightedThinkingText, found ${highlightedTextCandidates.length}`);
+    const highlightedTextFn = highlightedTextCandidates[0];
+    const htParam = highlightedTextFn.params[0].name;
+
+    // Find the isQueued variable — VariableDeclarator whose init reads `.isQueued`
+    const isQueuedDecl = findFirst(highlightedTextFn, (node: any) => {
+      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' || !node.init) return false;
+      return findFirst(node.init, (n: any) =>
+        n.type === 'MemberExpression' &&
+        n.property.type === 'Identifier' &&
+        n.property.name === 'isQueued') !== null;
+    });
+    assert(isQueuedDecl, 'Could not find isQueued variable in HighlightedThinkingText');
+    const isQueuedVar = isQueuedDecl.id.name;
+
+    // Inject after the first statement (the combined `let K=…,O=…,$=…` decl):
+    // compute __cxIsLater once per render. useCommandQueue() subscribes us
+    // to queue changes so we re-render when the matching command is dequeued.
+    const htFirstStmt = highlightedTextFn.body.body[0];
+    assert(htFirstStmt, 'HighlightedThinkingText body is empty');
+    const htInject =
+      `let __cxQ=${useQueueName}();` +
+      `let __cxIsLater=${isQueuedVar}&&__cxQ.some(function(c){` +
+      `return c&&c.priority==="later"&&` +
+      `(c.value===${htParam}.text||c.preExpansionValue===${htParam}.text)` +
+      `});`;
+    editor.insertAt(htFirstStmt.end, htInject);
+
+    // Prepend "queued " before every `X.pointer` inside the function, gated
+    // on __cxIsLater so only Ctrl+Q'd items get the marker.
+    const pointerRefs = findAll(highlightedTextFn, (n: any) =>
+      n.type === 'MemberExpression' &&
+      n.property.type === 'Identifier' &&
+      n.property.name === 'pointer' &&
+      n.object.type === 'Identifier');
+    assert(pointerRefs.length >= 1, 'Expected at least 1 pointer reference in HighlightedThinkingText');
+    for (const ref of pointerRefs) {
+      editor.insertAt(ref.start, `(__cxIsLater?"queued ":"")+`);
+    }
   },
 };
 
