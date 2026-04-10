@@ -1,0 +1,8 @@
+<svg width="150" height="154" viewBox="0 0 150 154" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="4" width="150" height="150" rx="18" fill="#000000" opacity="0.08"/>
+<rect x="0" y="0" width="150" height="146" rx="16" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+<text font-family="ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="80" font-weight="500" font-style="italic" letter-spacing="-4" x="75" y="90" text-anchor="middle">
+<tspan fill="#000000">c</tspan><tspan fill="#D97757">x</tspan>
+</text>
+<line x1="55" y1="115" x2="95" y2="115" stroke="#000000" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+</svg>
