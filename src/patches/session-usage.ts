@@ -1,16 +1,20 @@
 /**
  * Session Usage Indicator
  *
- * Always display both 5-hour session usage and context usage in the
- * format:
+ * Display both 5-hour session usage and context usage in the format:
  *   "25% session used · 15% context used"
  *
+ * Every 7 seconds the "session used" portion flashes to the 5-hour
+ * window reset time for 2 seconds before returning to the percentage.
+ * The "% context used" tail stays put across both phases:
+ *   "session resets in 2h 14m · 15% context used"
+ *
  * Session usage comes from the unified rate-limit response headers
- * (five_hour.utilization), tracked on every API call by claudeAiLimits.ts
- * and exposed via getRawUtilization(). When the session data isn't
- * available yet (cold start, API keys without a Claude.ai subscription,
- * etc.) the "X% session used · " prefix is omitted and only context
- * usage is shown.
+ * (five_hour.utilization / five_hour.resets_at), tracked on every API
+ * call by claudeAiLimits.ts and exposed via getRawUtilization(). When
+ * the session data isn't available yet (cold start, API keys without a
+ * Claude.ai subscription, etc.) the "X% session used · " prefix is
+ * omitted and only context usage is shown.
  *
  * This patch supersedes always-show-context — both patches edit the
  * same TokenWarning label template and will collide if enabled at the
@@ -25,8 +29,13 @@
  * 3. Drop the early-return gate so the indicator always renders.
  * 4. Neutralize the color when below the warning threshold.
  * 5. Soften "Context low" → "Context".
- * 6. Replace the auto-compact label template with one that reads
- *    session utilization and concatenates both percentages.
+ * 6. Replace the auto-compact label template with an IIFE that swaps
+ *    only the "session used" prefix between the utilization percent
+ *    and a reset-time flash on a 7-second cycle (t%7 >= 5 ⇒ flash).
+ * 7. Force TokenWarning to re-render every second by injecting a
+ *    useSyncExternalStore call bound to a module-level ticker. The
+ *    subscribe/snapshot closures are defined at module scope so
+ *    they're stable across renders and React doesn't resubscribe.
  */
 
 import type { Patch } from '../types.js';
@@ -34,7 +43,7 @@ import type { Patch } from '../types.js';
 const patch: Patch = {
   id: 'session-usage',
   name: 'Session Usage',
-  description: "Always show '25% session used · 15% context used'",
+  description: "Show '25% session used · 15% context used' (flashes reset time every 5s)",
   // Off by default because it edits the same TokenWarning template as
   // always-show-context — the transform will auto-resolve the conflict
   // (dropping always-show-context) if a user enables both.
@@ -182,11 +191,13 @@ const patch: Patch = {
     // W (reactiveOnlyMode) is always false in the public build, so the
     // template literal we want is the one containing "% until auto-compact".
     //
-    // Replacement, with G = getRawUtilization minified name:
-    //   `${G().five_hour?Math.round(G().five_hour.utilization*100)+'% session used · ':''}${100-P}% context used`
+    // Replacement is an IIFE that only swaps the "session used" prefix
+    // on a 7-second cycle. The "% context used" tail is fixed.
+    //   t%7 in [0..4] → "25% session used · 15% context used"
+    //   t%7 in [5..6] → "session resets in 2h 14m · 15% context used"
     //
-    // If the 5-hour window data isn't available the "% session used · "
-    // prefix is omitted gracefully.
+    // If the 5-hour window data (r) isn't available the flash is
+    // skipped and the "% session used · " prefix is omitted gracefully.
     const labelTpl = findFirst(fn, (n: any) =>
       n.type === 'TemplateLiteral' &&
       n.quasis.some((q: any) => q.value?.raw?.includes('% until auto-compact'))
@@ -194,13 +205,64 @@ const patch: Patch = {
     assert(labelTpl, 'Could not find auto-compact label template literal');
 
     const pctVar = src(labelTpl.expressions[0]);
-    const sessionExpr =
-      `${getterName}().five_hour?` +
-      `Math.round(${getterName}().five_hour.utilization*100)+` +
-      `"% session used \u00b7 ":""`;
-    const newTpl =
-      '`${' + sessionExpr + '}${100-' + pctVar + '}% context used`';
-    editor.replaceRange(labelTpl.start, labelTpl.end, newTpl);
+    const G = getterName;
+    const iife =
+      `(function(){` +
+        `var r=${G}().five_hour,` +
+            `t=Math.floor(Date.now()/1000),` +
+            `c=(100-${pctVar})+"% context used";` +
+        `if(r&&t%7>=5){` +
+          `var s=Math.max(0,Math.floor(r.resets_at-Date.now()/1000)),` +
+              `h=Math.floor(s/3600),` +
+              `m=Math.floor((s%3600)/60),` +
+              `p=h>0?"session resets in "+h+"h "+m+"m":` +
+                 `m>0?"session resets in "+m+"m":` +
+                 `"session resets in <1m";` +
+          `return p+" \u00b7 "+c` +
+        `}` +
+        `return (r?Math.round(r.utilization*100)+"% session used \u00b7 ":"")+c` +
+      `}())`;
+    editor.replaceRange(labelTpl.start, labelTpl.end, iife);
+
+    // ── 7. Force a re-render every second for the reset-time flash ──
+    //
+    // React only re-runs TokenWarning when its parent re-renders or a
+    // subscribed store changes. To drive the 5-second flash cycle we
+    // subscribe to a wall-clock ticker via useSyncExternalStore. The
+    // subscribe + snapshot closures live at module scope so they're
+    // stable across renders (otherwise React resubscribes every
+    // render, setting up and tearing down a setInterval each time).
+    //
+    // React namespace: grab the identifier from an existing
+    //   <ns>.createElement(...) call inside TokenWarning.
+    const createEl = findFirst(fn, (n: any) =>
+      n.type === 'CallExpression' &&
+      n.callee?.type === 'MemberExpression' &&
+      n.callee.property?.type === 'Identifier' &&
+      n.callee.property.name === 'createElement' &&
+      n.callee.object?.type === 'Identifier'
+    );
+    assert(createEl, 'Could not find createElement call in TokenWarning');
+    const R = createEl.callee.object.name;
+
+    // Module-level ticker helpers, inserted just before the function
+    // declaration. The subscribe callback sets up a 1-second interval
+    // that pokes React; the snapshot returns an integer that advances
+    // every second so useSyncExternalStore detects the change.
+    editor.insertAt(fn.start,
+      `var __cxsusSub=function(cb){` +
+        `var i=setInterval(cb,1000);` +
+        `return function(){clearInterval(i)}` +
+      `};` +
+      `var __cxsusGet=function(){return Math.floor(Date.now()/1000)};`
+    );
+
+    // Hook call at the very top of the function body — unconditional
+    // so it satisfies the rules of hooks. Insert after the opening
+    // "{" of the BlockStatement.
+    editor.insertAt(fn.body.start + 1,
+      `${R}.useSyncExternalStore(__cxsusSub,__cxsusGet);`
+    );
   },
 };
 
