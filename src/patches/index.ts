@@ -4,6 +4,7 @@ export { default as randomClawd } from './random-clawd.js';
 export { default as alwaysShowThinking } from './always-show-thinking.js';
 export { default as showFileInCollapsedRead } from './show-file-in-collapsed-read.js';
 export { default as persistMaxEffort } from './persist-max-effort.js';
+export { default as granularEffort } from './granular-effort.js';
 export { default as noNpmWarning } from './no-npm-warning.js';
 export { default as cxBadge } from './cx-badge.js';
 export { default as cxResumeCommands } from './cx-resume-commands.js';

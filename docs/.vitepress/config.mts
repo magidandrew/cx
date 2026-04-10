@@ -59,6 +59,7 @@ export default defineConfig({
               { text: 'Attribution Banner', link: '/patches/banner' },
               { text: 'Swap Enter / Meta+Enter', link: '/patches/swap-enter-submit' },
               { text: 'Simple Spinner', link: '/patches/simple-spinner' },
+              { text: 'Granular Effort Slider', link: '/patches/granular-effort' },
             ],
           },
         ],
