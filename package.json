@@ -35,6 +35,10 @@
     "extensions",
     "patches"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/magidandrew/cx"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=18"
