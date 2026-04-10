@@ -10,6 +10,15 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/cx-logo.svg' }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: 'cx — Claude Code Extensions' }],
+    ['meta', { property: 'og:description', content: 'Modular, opt-in patches for Claude Code. Unlock the power of Claude Code, without compromise.' }],
+    ['meta', { property: 'og:image', content: 'https://cx.worms.coffee/og-image.png' }],
+    ['meta', { property: 'og:url', content: 'https://cx.worms.coffee/' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: 'cx — Claude Code Extensions' }],
+    ['meta', { name: 'twitter:description', content: 'Modular, opt-in patches for Claude Code. Unlock the power of Claude Code, without compromise.' }],
+    ['meta', { name: 'twitter:image', content: 'https://cx.worms.coffee/og-image.png' }],
   ],
 
   themeConfig: {
