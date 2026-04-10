@@ -36,7 +36,7 @@ const groups: Group[] = [
   { label: 'Display', ids: [
     'always-show-thinking', 'disable-paste-collapse',
     'show-file-in-collapsed-read', 'cx-badge',
-    'cx-resume-commands', 'random-clawd', 'session-timer',
+    'cx-resume-commands', 'random-clawd',
   ]},
   { label: 'Input', ids: [
     'queue', 'swap-enter-submit', 'reload',
@@ -45,7 +45,7 @@ const groups: Group[] = [
     'no-tips', 'simple-spinner',
   ]},
   { label: 'Behavior', ids: [
-    'persist-max-effort', 'no-npm-warning', 'no-feedback', 'session-export',
+    'persist-max-effort', 'no-npm-warning', 'no-feedback',
   ]},
 ];
 

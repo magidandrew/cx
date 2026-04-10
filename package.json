@@ -1,17 +1,20 @@
 {
   "name": "claude-code-extensions",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Modular, opt-in patches for @anthropic-ai/claude-code applied at runtime via AST transformation",
   "type": "module",
   "bin": {
     "cx": "./dist/cli.js",
-    "cx-setup": "./dist/cli-setup.js"
+    "cx-setup": "./dist/cli-setup.js",
+    "cx-list": "./dist/cli-list.js",
+    "cx-reload": "./dist/cli-reload.js"
   },
   "files": [
     "dist/"
   ],
   "scripts": {
     "build": "tsc",
+    "link": "tsc && npm link",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

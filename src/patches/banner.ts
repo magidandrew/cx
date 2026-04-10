@@ -44,7 +44,63 @@ const patch: Patch = {
     editor.replaceRange(textLiteral.start, textLiteral.end,
       `"Claude Code Extensions (cx) v${version} by x.com/@wormcoffee"`);
 
-    // ── Boxed layout: b7("claude",o)("Claude Code") in the border title ──
+    // ── Star-the-repo line in the condensed layout ──
+    // The column Box has children: I (title), B (model), R (cwd), g, F
+    // We find the column Box (flexDirection:"column") that contains the bold title,
+    // then inject a dimColor text after the title argument.
+
+    const condensedFn = index.enclosingFunction(boldTextCall);
+    assert(condensedFn, 'Could not find enclosing function for condensed logo');
+
+    // Find the column Box: createElement(u, {flexDirection:"column"}, I, B, R, ...)
+    const columnBox = find.findFirst(condensedFn, (n: any) =>
+      n.type === 'CallExpression' &&
+      n.arguments?.[1]?.type === 'ObjectExpression' &&
+      n.arguments[1].properties?.some?.((p: any) =>
+        p.key?.name === 'flexDirection' && p.value?.value === 'column'));
+    assert(columnBox, 'Could not find column Box in condensed logo');
+
+    // The first child after the props object is the title element (I).
+    // Insert our star text element right after it.
+    const columnArgs = columnBox.arguments;
+    // args[0] = Box component, args[1] = {flexDirection:"column"}, args[2..] = children
+    assert(columnArgs.length >= 3, 'Column Box has no children');
+    const titleChild = columnArgs[2]; // I — the title element
+
+    // Get the React namespace, Text and Box components from the createElement calls
+    const reactNs = src(boldTextCall.callee.object);  // e.g. "qO"
+    const textComp = src(boldTextCall.arguments[0]);   // e.g. "T"
+    const boxComp = src(columnBox.arguments[0]);       // e.g. "u"
+
+    const starText = `${reactNs}.createElement(${textComp},{dimColor:!0},"I don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`;
+
+    editor.insertAt(titleChild.end,
+      `,${starText}`);
+
+    // ── Boxed (v2) layout: inject star lines at the bottom ──
+    // Find the compact boxed container: createElement(u, {borderStyle:"round", borderColor:"claude", borderText:...})
+    // and inject star lines after the last child (cwd line).
+
+    const borderTextLiterals = index.allNodes.filter((n: any) =>
+      n.type === 'Property' && n.key?.name === 'borderText');
+    for (const prop of borderTextLiterals) {
+      const obj = index.parentMap.get(prop);
+      if (!obj || obj.type !== 'ObjectExpression') continue;
+      // Must also have borderColor:"claude"
+      const hasClaudeColor = obj.properties.some((p: any) =>
+        p.key?.name === 'borderColor' && p.value?.value === 'claude');
+      if (!hasClaudeColor) continue;
+      // This is the boxed logo. Find the enclosing createElement call.
+      const boxCall = index.parentMap.get(obj);
+      if (!boxCall || boxCall.type !== 'CallExpression') continue;
+      // Last argument is the last child — inject after it
+      const lastArg = boxCall.arguments[boxCall.arguments.length - 1];
+      // Get React namespace from this scope
+      const boxReactNs = src(boxCall.callee.object);
+      editor.insertAt(lastArg.end,
+        `,${boxReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`);
+      break;
+    }
 
     // ── Boxed layout: b7("claude",o)("Claude Code") ──
     // Find "Claude Code" literal whose parent CallExpression's callee is another call with "claude"

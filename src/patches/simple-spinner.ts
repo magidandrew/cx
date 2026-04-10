@@ -14,6 +14,7 @@ const patch: Patch = {
   id: 'simple-spinner',
   name: 'Simple Spinner',
   description: 'Replace spinner verb cycling with static "working" / "worked"',
+  defaultEnabled: false,
 
   apply(ctx) {
     const { ast, editor, query, assert } = ctx;

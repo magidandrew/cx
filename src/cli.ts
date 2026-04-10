@@ -2,18 +2,14 @@
 /**
  * cx — Claude Code Extensions
  *
- * Drop-in replacement for `claude`. Applies enabled patches at runtime
+ * Pure drop-in replacement for `claude`. Applies enabled patches at runtime
  * via AST transformation. The original cli.js is never modified.
  * All arguments pass through to claude untouched.
  *
- * Subcommands:
- *   cx setup    — interactive patch configurator
- *   cx list     — show patch status
- *   cx reload   — signal a running cx instance to reload Claude
- *   cx [args]   — run patched Claude (with auto-reload support)
- *
- * Reload: type `! cx reload` inside Claude to restart the session
- * with fresh patches applied. The conversation resumes via --continue.
+ * Related commands:
+ *   cx-setup   — interactive patch configurator
+ *   cx-list    — show patch status
+ *   cx-reload  — signal a running cx instance to reload Claude
  */
 
 import { existsSync, readFileSync, writeFileSync, statSync, mkdirSync, unlinkSync } from 'fs';
@@ -31,24 +27,6 @@ const metaPath = resolve(cacheDir, 'meta.json');
 const PID_FILE = resolve(__dirname, '..', '.cx-pid');
 const RELOAD_EXIT_CODE = 75;
 
-// ── Subcommands (fast path, before any heavy work) ───────────────────────
-
-const sub = process.argv[2];
-
-if (sub === 'reload') {
-  try {
-    const pid = parseInt(readFileSync(PID_FILE, 'utf-8').trim(), 10);
-    process.kill(pid, 'SIGUSR1');
-    process.stderr.write('\x1b[2mcx: reload signal sent\x1b[0m\n');
-  } catch (e: any) {
-    const msg = e.code === 'ENOENT' ? 'no cx instance running'
-      : e.code === 'ESRCH' ? 'cx process not running'
-      : e.message;
-    process.stderr.write(`cx reload: ${msg}\n`);
-    process.exit(1);
-  }
-  process.exit(0);
-}
 
 // ── Config ───────────────────────────────────────────────────────────────
 
@@ -67,21 +45,6 @@ function getEnabledPatches(): string[] {
   }).map(p => p.id);
 }
 
-if (sub === 'list') {
-  const all = listPatches();
-  const enabled = getEnabledPatches();
-  for (const p of all) {
-    const on = enabled.includes(p.id);
-    process.stdout.write(`  ${on ? '\x1b[32m✓\x1b[0m' : '\x1b[90m✗\x1b[0m'} ${p.id} — ${p.description ?? p.name}\n`);
-  }
-  process.exit(0);
-}
-
-if (sub === 'setup') {
-  const { default: setup } = await import('./setup.js');
-  await setup();
-  process.exit(0);
-}
 
 // ── First run ────────────────────────────────────────────────────────────
 
