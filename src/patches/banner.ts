@@ -1,12 +1,19 @@
 /**
  * Attribution Banner Patch
  *
- * Changes "Claude Code" to "Claude Code · @wormcoffee" on the title line.
+ * Changes "Claude Code" to "Claude Code Extensions (cx) v<version> by @wormcoffee" on the title line.
  * Targets the bold <Text> in the condensed layout and the border title
  * in the boxed layout. No extra elements, no layout changes.
  */
 
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import type { Patch } from '../types.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(__dirname, '..', '..', 'package.json'), 'utf-8'));
+const version = pkg.version as string;
 
 const patch: Patch = {
   id: 'banner',
@@ -35,7 +42,7 @@ const patch: Patch = {
     const textLiteral = boldTextCall.arguments.find((a: any) =>
       a.type === 'Literal' && a.value === 'Claude Code');
     editor.replaceRange(textLiteral.start, textLiteral.end,
-      '"Claude Code Extensions (cx) by x.com/@wormcoffee"');
+      `"Claude Code Extensions (cx) v${version} by x.com/@wormcoffee"`);
 
     // ── Boxed layout: b7("claude",o)("Claude Code") in the border title ──
 
@@ -54,7 +61,7 @@ const patch: Patch = {
     }
     if (titleCall) {
       editor.replaceRange(titleCall.arguments[0].start, titleCall.arguments[0].end,
-        '"Claude Code Extensions (cx) by x.com/@wormcoffee"');
+        `"Claude Code Extensions (cx) v${version} by x.com/@wormcoffee"`);
     }
   },
 };
