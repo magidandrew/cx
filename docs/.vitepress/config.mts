@@ -58,6 +58,7 @@ export default defineConfig({
               { text: '/cd Command', link: '/patches/cd-command' },
               { text: 'Attribution Banner', link: '/patches/banner' },
               { text: 'Swap Enter / Meta+Enter', link: '/patches/swap-enter-submit' },
+              { text: 'Cut prompt to clipboard', link: '/patches/cut-to-clipboard' },
               { text: 'Simple Spinner', link: '/patches/simple-spinner' },
               { text: 'Granular Effort Slider', link: '/patches/granular-effort' },
             ],
