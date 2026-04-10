@@ -10,14 +10,14 @@ Modular, opt-in patches for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 Claude Code is great. But some things can't be configured with settings alone:
 
-- **Message queue** — `Ctrl+Q` buffers messages while Claude is working. Stop waiting for a turn to finish just to paste in the next instruction.
-- **Persistent max effort** — Claude resets effort level every session. cx saves "max" to settings so you don't have to `/config` it every single time.
+- **Message queue** — `Ctrl+Q` lets you steer Claude mid-response. Buffer your next instruction while it's still working — it gets injected as a user-turn immediately.
+- **Persistent max effort** — Claude resets effort level every session. cx saves "max" to settings so you don't have to `/model` it back every time.
 - **See your pasted text** — Voice dictation and large pastes get collapsed into `[Pasted text #N]` which hides what you actually said. `cx` shows it inline so you can verify what was sent.
 - **No attribution** — No more `Co-authored-by: Claude` in your commits and PRs.
 - **Swap Enter / Option+Enter** — Enter inserts a newline, Option+Enter submits. Essential if you're on SSH, a non-English keyboard, or just prefer multiline-first input.
 - **Context usage, always visible** — See how much context you've used at all times, not just when you're about to hit the wall.
 - **Hot reload** — Change patches, tweak config, update Claude Code — press `Ctrl+X Ctrl+R` and the session restarts with fresh patches. Your conversation continues via `--continue`.
-- **Quiet mode** — No spinner tips, no feedback surveys, no npm-to-native-installer nag. Just the work.
+- **Quiet mode** — No spinner tips, no feedback surveys, or npm-to-native-installer nag.
 
 19 patches total, 17 enabled by default. Toggle any combination on or off.
 
@@ -44,7 +44,7 @@ All `claude` arguments pass through: `cx --model sonnet -p "hello"` works exactl
 
 | Patch | Description | Default |
 |---|---|:---:|
-| `queue` | `Ctrl+Q` message queue — buffer messages to run sequentially | on |
+| `queue` | `Ctrl+Q` message queue — steer Claude mid-response with buffered instructions | on |
 | `always-show-thinking` | Show thinking block content inline | on |
 | `always-show-context` | Always display context usage percentage | on |
 | `show-file-in-collapsed-read` | Show file paths in collapsed tool display | on |
@@ -78,7 +78,7 @@ or press `Ctrl+X Ctrl+R`. The session restarts with fresh patches applied and yo
 1. `cx` locates your global `@anthropic-ai/claude-code/cli.js`
 2. Parses the ~4MB minified bundle into an AST with [acorn](https://github.com/acornjs/acorn)
 3. Each enabled patch finds its target via structural queries and splices in changes
-4. The patched source is cached so that subsequent launches are instant
+4. The patched source is cached, so subsequent launches are instant
 5. `cx` spawns Node on the cached bundle with your original arguments
 
 Patches are pure AST transforms. They don't monkey-patch at runtime, don't wrap modules, and don't touch the original file on disk.
