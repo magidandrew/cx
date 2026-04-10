@@ -73,6 +73,7 @@ const states: boolean[] = allPatchList.map(p =>
 );
 let cursor = 0;
 let dirty = false;
+let resetPending = false;
 
 // ── Rendering ─────────────────────────────────────────────────────────────
 
@@ -124,11 +125,15 @@ function render(): void {
 
   // Footer
   lines.push('');
-  let footer = `  ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}enter${RESET} save  ${DIM}esc${RESET} cancel`;
-  if (dirty) {
-    footer += `    ${YELLOW}● unsaved${RESET}`;
+  if (resetPending) {
+    lines.push(`  ${YELLOW}Press r again to reset all patches to defaults${RESET}`);
+  } else {
+    let footer = `  ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}r${RESET} reset  ${DIM}enter${RESET} save  ${DIM}esc${RESET} cancel`;
+    if (dirty) {
+      footer += `    ${YELLOW}● unsaved${RESET}`;
+    }
+    lines.push(footer);
   }
-  lines.push(footer);
 
   const prefix = CLEAR + HIDE_CURSOR;
 
@@ -184,6 +189,28 @@ export default function setup(): void {
       cleanup();
       console.log('  Cancelled — no changes saved.\n');
       process.exit(0);
+    }
+
+    // Reset to defaults (two-press confirmation)
+    if (key === 'r') {
+      if (resetPending) {
+        // Second press — perform the reset
+        for (let i = 0; i < allPatchList.length; i++) {
+          states[i] = allPatchList[i].defaultEnabled !== false;
+        }
+        dirty = true;
+        resetPending = false;
+      } else {
+        // First press — enter pending state
+        resetPending = true;
+      }
+      render();
+      return;
+    }
+
+    // Any other key cancels a pending reset
+    if (resetPending) {
+      resetPending = false;
     }
 
     // Arrow up / k
