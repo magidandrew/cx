@@ -15,14 +15,18 @@
   "scripts": {
     "build": "tsc",
     "link": "tsc && npm link",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "acorn": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitepress": "^1.5.0"
   },
   "peerDependencies": {
     "@anthropic-ai/claude-code": "*"

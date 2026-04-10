@@ -10,7 +10,7 @@ Modular, opt-in patches for [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 Claude Code is great. But some things can't be configured with settings alone:
 
-- **Message queue** — `Ctrl+Q` lets you steer Claude mid-response. Buffer your next instruction while it's still working — it gets injected as a user-turn immediately.
+- **Real message queue** — Claude Code's default Enter steers mid-response, injecting your message into the current turn. `Ctrl+Q` instead buffers it as a true queued message that runs only after the current turn finishes.
 - **Persistent max effort** — Claude resets effort level every session. cx saves "max" to settings so you don't have to `/model` it back every time.
 - **See your pasted text** — Voice dictation and large pastes get collapsed into `[Pasted text #N]` which hides what you actually said. `cx` shows it inline so you can verify what was sent.
 - **No attribution** — No more `Co-authored-by: Claude` in your commits and PRs.
@@ -44,7 +44,7 @@ All `claude` arguments pass through: `cx --model sonnet -p "hello"` works exactl
 
 | Patch | Description | Default |
 |---|---|:---:|
-| `queue` | `Ctrl+Q` message queue — steer Claude mid-response with buffered instructions | on |
+| `queue` | `Ctrl+Q` true message queue — buffer instructions to run after the current turn (vs. Enter, which steers mid-response) | on |
 | `always-show-thinking` | Show thinking block content inline | on |
 | `always-show-context` | Always display context usage percentage | on |
 | `show-file-in-collapsed-read` | Show file paths in collapsed tool display | on |
