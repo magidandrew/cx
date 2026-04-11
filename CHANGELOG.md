@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.8] — 2026-04-11
+
+### Fixes
+
+- **session-usage** — Followup to 0.2.7. Dropping the parent-side `isAboveWarningThreshold` gate wasn't enough: in `claude-code >= 2.1.97` the notifications display component only shows one queued notification at a time (`notifications.current`), so even with the gate removed, `token-warning` would sit in the queue invisibly behind higher-priority notifications (env-hook, external-editor-hint, …) and the indicator never appeared during normal use. The patch now re-creates the old "rendered as plain JSX" behavior by injecting a permanent `createElement(TokenWarning,{tokenUsage,model})` sibling inside the outer `<Box flexDirection="column" alignItems="flex-end">` in the parent's return JSX, so TokenWarning shows up outside the notification queue entirely. The `addNotification` gate is now rewritten to `!1` (instead of `!0`) so the queue-registration else-branch always runs, avoiding double-render when token-warning would otherwise have become current.
+
 ## [0.2.7] — 2026-04-11
 
 ### Fixes

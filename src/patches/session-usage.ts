@@ -32,17 +32,29 @@
  *    useSyncExternalStore call bound to a module-level ticker. The
  *    subscribe/snapshot closures are defined at module scope so
  *    they're stable across renders and React doesn't resubscribe.
- * 8. Disable the *parent-side* warning gate that was added in
+ * 8. Restore out-of-queue rendering for the *parent-side* change in
  *    claude-code 2.1.97+. The Notifications parent stopped rendering
- *    `<TokenWarning />` as plain JSX and started registering it via
- *    `addNotification(...)` inside a useEffect gated on
- *    `isAboveWarningThreshold`, so dropping the in-component gate in
- *    step 3 is no longer enough — the parent never even mounts the
- *    component until you cross the threshold. We rewrite the gate's
- *    leftmost leaf (`isAboveWarningThreshold`) to `!0` so the
- *    addNotification path runs unconditionally. Older bundles render
- *    TokenWarning as plain JSX with no parent gate, so this step is a
- *    silent no-op when the pattern isn't found.
+ *    `<TokenWarning />` as plain JSX in its JSX tree and started
+ *    registering it through `addNotification({key:"token-warning",…})`.
+ *    The queue-display component only shows one notification at a
+ *    time via `notifications.current`, so once any other notification
+ *    is present (env-hook, external-editor-hint, …) the token warning
+ *    sits in the queue invisibly and the indicator disappears.
+ *
+ *    We re-create the old behavior by injecting TokenWarning as a
+ *    permanent sibling of `NotificationContent` inside the outer
+ *    `<Box flexDirection="column" alignItems="flex-end" …>` in the
+ *    parent's return JSX, reusing the exact `createElement(M75,
+ *    {tokenUsage:J,model:X})` expression from the addNotification
+ *    call (so we pick up whatever minified identifiers the parent
+ *    uses for tokenUsage and model without having to re-derive them).
+ *    We then rewrite the addNotification `useEffect`'s gate to `!1` so
+ *    the queue-registration else-branch always runs and we never
+ *    double-render when token-warning would have become current.
+ *
+ *    Older bundles that render TokenWarning as plain JSX have no
+ *    addNotification call with `key:"token-warning"`, so this whole
+ *    step is a silent no-op there.
  */
 
 import type { Patch } from '../types.js';
@@ -267,52 +279,122 @@ const patch: Patch = {
       `${R}.useSyncExternalStore(__cxsusSub,__cxsusGet);`
     );
 
-    // ── 8. Disable the parent-side gate (claude-code 2.1.97+) ───────
+    // ── 8. Restore out-of-queue TokenWarning rendering (2.1.97+) ────
     //
-    // In 2.1.97+ the Notifications parent registers TokenWarning via
-    // the notification system, gated on isAboveWarningThreshold:
+    // Starting in 2.1.97 the Notifications parent stopped rendering
+    // <TokenWarning/> as plain JSX and instead registers it through
+    // addNotification({key:"token-warning",
+    //                  jsx: createElement(TokenWarning,{tokenUsage,model})})
+    // inside a useEffect. The queue-display component only shows one
+    // notification at a time via `notifications.current`, so as soon
+    // as any other notification (env-hook, external-editor-hint, …)
+    // is present our token warning sits in the queue invisibly and
+    // the indicator disappears.
     //
-    //   useEffect(() => {
-    //     if (isAboveWarningThreshold && !suppressed && !briefOnly)
-    //       addNotification({key:"token-warning",
-    //                        jsx: createElement(TokenWarning, ...)})
-    //     else
-    //       removeNotification("token-warning")
-    //   }, [...])
+    // Fix:
+    //   (a) locate the addNotification({key:"token-warning",jsx:…})
+    //       call by searching for an ObjectExpression whose `key`
+    //       property literal is "token-warning"
+    //   (b) reuse the exact `createElement(TokenWarning,{tokenUsage,
+    //       model})` source from its `jsx` property — this captures
+    //       whatever minified identifiers the enclosing function
+    //       happens to use, so we don't have to re-derive them
+    //   (c) find the outer Box in the enclosing function's return JSX
+    //       — uniquely identified by its props combo
+    //       {flexDirection:"column",alignItems:"flex-end",…} — and
+    //       insert our createElement as an additional child, so
+    //       TokenWarning renders as a permanent sibling of
+    //       NotificationContent outside the queue
+    //   (d) rewrite the addNotification gate's leftmost leaf
+    //       (isAboveWarningThreshold) to `!1` so the else-branch
+    //       always runs and the queue never contains token-warning —
+    //       otherwise we'd double-render once the queue made our
+    //       entry current
     //
-    // We find that IfStatement by looking for an `&&`-chain test
-    // whose consequent contains a `createElement(<TokenWarningName>,…)`
-    // call, then walk the leftmost leaf of the chain (which is the
-    // bare `isAboveWarningThreshold` identifier) and replace it with
-    // `!0`. The chain `!0 && !suppressed && !briefOnly` collapses to
-    // `!suppressed && !briefOnly`, so the notification gets registered
-    // regardless of usage and our patched TokenWarning actually mounts.
-    //
-    // Silent no-op on older bundles that render TokenWarning as plain
-    // JSX (no IfStatement matches the predicate, so we skip cleanly).
-    const fnName = (fn as any).id?.name;
-    if (fnName) {
-      const ifStatements = index.nodesByType.get('IfStatement') || [];
-      let parentGate: any = null;
-      for (const ifs of ifStatements) {
-        if (ifs.test?.type !== 'LogicalExpression' || ifs.test.operator !== '&&') continue;
-        const ce = findFirst(ifs.consequent, (n: any) =>
-          n.type === 'CallExpression' &&
-          n.callee?.type === 'MemberExpression' &&
-          n.callee.property?.type === 'Identifier' &&
-          n.callee.property.name === 'createElement' &&
-          n.arguments?.[0]?.type === 'Identifier' &&
-          n.arguments[0].name === fnName
-        );
-        if (ce) { parentGate = ifs; break; }
+    // On older bundles there's no ObjectExpression with `key:"token-
+    // warning"`, so `notifObj` stays null and this whole step is a
+    // silent no-op.
+    let notifObj: any = null;
+    for (const obj of index.nodesByType.get('ObjectExpression') || []) {
+      const keyProp = (obj as any).properties?.find((p: any) =>
+        p?.type === 'Property' &&
+        p.key?.type === 'Identifier' && p.key.name === 'key' &&
+        p.value?.type === 'Literal' && p.value.value === 'token-warning'
+      );
+      if (!keyProp) continue;
+      const jsxProp = (obj as any).properties.find((p: any) =>
+        p?.type === 'Property' &&
+        p.key?.type === 'Identifier' && p.key.name === 'jsx'
+      );
+      if (jsxProp?.value?.type === 'CallExpression') {
+        notifObj = obj;
+        break;
       }
-      if (parentGate) {
-        let leaf = parentGate.test;
-        while (leaf.type === 'LogicalExpression' && leaf.operator === '&&') {
-          leaf = leaf.left;
+    }
+
+    if (notifObj) {
+      const jsxCall = notifObj.properties.find((p: any) => p.key?.name === 'jsx').value;
+      const isCreateEl =
+        jsxCall.callee?.type === 'MemberExpression' &&
+        jsxCall.callee.property?.type === 'Identifier' &&
+        jsxCall.callee.property.name === 'createElement' &&
+        jsxCall.callee.object?.type === 'Identifier' &&
+        jsxCall.arguments?.[0]?.type === 'Identifier';
+
+      if (isCreateEl) {
+        // (c) Find the outer Box createElement — unique to the
+        //     parent's JSX tree via the flexDirection/alignItems combo.
+        let boxCall: any = null;
+        for (const ce of index.nodesByType.get('CallExpression') || []) {
+          const callee = (ce as any).callee;
+          if (callee?.type !== 'MemberExpression') continue;
+          if (callee.property?.name !== 'createElement') continue;
+          const props = (ce as any).arguments?.[1];
+          if (props?.type !== 'ObjectExpression') continue;
+          const hasFD = props.properties.some((p: any) =>
+            p?.type === 'Property' &&
+            p.key?.type === 'Identifier' && p.key.name === 'flexDirection' &&
+            p.value?.type === 'Literal' && p.value.value === 'column'
+          );
+          const hasAI = props.properties.some((p: any) =>
+            p?.type === 'Property' &&
+            p.key?.type === 'Identifier' && p.key.name === 'alignItems' &&
+            p.value?.type === 'Literal' && p.value.value === 'flex-end'
+          );
+          if (hasFD && hasAI && (ce as any).arguments.length >= 3) {
+            boxCall = ce;
+            break;
+          }
         }
-        if (leaf?.type === 'Identifier') {
-          editor.replaceRange(leaf.start, leaf.end, '!0');
+
+        if (boxCall) {
+          // Insert a sibling createElement(TokenWarning,{tokenUsage,
+          // model}) at the end of the Box's children — reuses the
+          // exact AST source so we don't have to know the parent's
+          // minified variable names for tokenUsage / model.
+          const sibling = src(jsxCall);
+          const lastArg = boxCall.arguments[boxCall.arguments.length - 1];
+          editor.insertAt(lastArg.end, `,${sibling}`);
+
+          // (d) Rewrite the addNotification useEffect gate to never
+          //     register — find the IfStatement whose consequent
+          //     contains this specific notifObj, then walk its test
+          //     && chain to the leftmost identifier leaf and
+          //     overwrite with `!1`.
+          for (const ifs of index.nodesByType.get('IfStatement') || []) {
+            if ((ifs as any).test?.type !== 'LogicalExpression') continue;
+            if ((ifs as any).test.operator !== '&&') continue;
+            const contains = findFirst((ifs as any).consequent, (n: any) => n === notifObj);
+            if (!contains) continue;
+            let leaf: any = (ifs as any).test;
+            while (leaf.type === 'LogicalExpression' && leaf.operator === '&&') {
+              leaf = leaf.left;
+            }
+            if (leaf?.type === 'Identifier') {
+              editor.replaceRange(leaf.start, leaf.end, '!1');
+            }
+            break;
+          }
         }
       }
     }
