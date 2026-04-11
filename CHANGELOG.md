@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.6] — 2026-04-11
+
+### Fixes
+
+- **per-session-effort** — Fix `Could not find (cond ? { effortValue: X } : {}) in applySettingsChange` against `claude-code >= 2.1.97`. The minified bundle started rendering the effort spread as `...cond && { effortValue: X }` (a `LogicalExpression`) instead of the old `...(cond ? { effortValue: X } : {})` ternary, so the previous single-shape matcher couldn't find it. The patch now ships two version-gated variants — a `>=2.1.97` LogicalExpression form and a `*` ConditionalExpression fallback — and the variant selector picks the right one for the installed claude-code version.
+
+### Internal
+
+- **Per-version patch variants** — Patches can now declare a `variants: [{ version, apply }]` array. The transform picks the first variant whose semver range matches the installed claude-code version, falling back to a single `apply` if no variants are declared. Lets a single patch ride out bundle-shape churn across releases instead of breaking on every minifier reshuffle.
+- **Daily CI regression test** — `test-patches.yml` now runs at 08:00 UTC daily against the latest published `@anthropic-ai/claude-code`, opens or updates a tracking issue when any patch breaks, and auto-closes the issue once patches go green again.
+- **Friendly startup error** — When a patch fails to apply at `cx` startup, the error block now prints a readable summary instead of a raw worker stack.
+- **CI hygiene** — Dropped `actions/upload-artifact@v4` (still on Node 20) from `test-patches.yml` and replaced it with an inline `cat` of the report; opted remaining JS actions into Node 24 via `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` to silence the deprecation warnings.
+
 ## [0.2.5] — 2026-04-11
 
 ### New patches
