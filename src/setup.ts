@@ -233,12 +233,42 @@ function conflictGlyph(i: number): string {
   return ' ';
 }
 
-function render(): void {
-  const rows = process.stdout.rows || 24;
-  const cols = process.stdout.columns || 80;
-  const lines: string[] = [];
-  const patchLineIndex: number[] = [];
+// Render layout — three regions composed at draw time:
+//
+//   ┌─ header (fixed) ──────────────┐   never scrolls
+//   │  cx setup — …                 │
+//   ├─ body (scrollable) ───────────┤   patch list; scrolls with ↑/↓more
+//   │  Display                      │
+//   │  > ✔  patch-id     description│
+//   │    ○  patch-id     description│
+//   │  …                            │
+//   ├─ footer (fixed) ──────────────┤   always visible so the user
+//   │  14/27 enabled  ●unsaved      │   can see the keybindings even
+//   │  [↑↓] nav  [space] toggle  …  │   while the patch list overflows
+//   └───────────────────────────────┘
+//
+// When body fits: render header + body + footer naturally.
+// When body overflows: allocate `rows - header - footer - 2` lines for
+// the body window, reserve 1 line each for ↑more/↓more indicators, and
+// pad the body window with empty strings if it's shorter than allocated
+// so the footer stays glued to the terminal's bottom row.
 
+function buildHeader(): string[] {
+  const out: string[] = [''];
+  if (firstRunMode) {
+    out.push(`  ${BOLD}${CYAN}Welcome to cx${RESET}  ${DIM}— Claude Code Extensions${RESET}`);
+    out.push(`  ${DIM}These patches will be applied to Claude Code at runtime.${RESET}`);
+    out.push(`  ${DIM}Toggle with ${RESET}${BOLD}space${RESET}${DIM}, then ${RESET}${BOLD}enter${RESET}${DIM} to save — or ${RESET}${BOLD}enter${RESET}${DIM} now for defaults.${RESET}`);
+    out.push(`  ${DIM}You can re-run this anytime with ${RESET}${BOLD}cx setup${RESET}${DIM}.${RESET}`);
+  } else {
+    out.push(`  ${BOLD}${CYAN}cx setup${RESET}  ${DIM}— toggle Claude Code patches on/off${RESET}`);
+  }
+  return out;
+}
+
+function buildBody(cols: number): { body: string[]; patchLineIndex: number[]; visibleCount: number } {
+  const body: string[] = [];
+  const patchLineIndex: number[] = [];
   // Max description width. The patch line prefix is `8 + maxId` visible
   // chars (2 pointer + 1 checkbox + 1 space + 1 glyph + 1 space + id +
   // 2 pad), leaving the rest for the description. Truncate with an
@@ -247,20 +277,9 @@ function render(): void {
   // would be wrong.
   const maxDescWidth = Math.max(10, cols - (8 + maxId) - 1);
 
-  // Header
-  lines.push('');
-  if (firstRunMode) {
-    lines.push(`  ${BOLD}${CYAN}Welcome to cx${RESET}  ${DIM}— Claude Code Extensions${RESET}`);
-    lines.push(`  ${DIM}These patches will be applied to Claude Code at runtime.${RESET}`);
-    lines.push(`  ${DIM}Press Enter to proceed with defaults, or toggle patches with Space.${RESET}`);
-    lines.push(`  ${DIM}You can always change this later by running ${RESET}${BOLD}cx setup${RESET}${DIM}.${RESET}`);
-  } else {
-    lines.push(`  ${BOLD}${CYAN}cx setup${RESET}  ${DIM}— toggle patches on/off${RESET}`);
-  }
-
-  // Patch list with section headers. Section headers are deferred until
-  // at least one visible patch follows them, so filtering doesn't leave
-  // empty-section labels stranded.
+  // Section headers are deferred until at least one visible patch
+  // follows them, so filtering doesn't leave empty-section labels
+  // stranded.
   let pendingSection: string | null = null;
   let visibleCount = 0;
   for (let i = 0; i < allPatchList.length; i++) {
@@ -268,8 +287,11 @@ function render(): void {
     if (!isVisible(i)) continue;
 
     if (pendingSection) {
-      lines.push('');
-      lines.push(`  ${DIM}${pendingSection}${RESET}`);
+      // Blank separator between sections — but not before the first one,
+      // so body[0] is the first section label (header provides the blank
+      // line that sits above it).
+      if (body.length > 0) body.push('');
+      body.push(`  ${DIM}${pendingSection}${RESET}`);
       pendingSection = null;
     }
 
@@ -298,58 +320,96 @@ function render(): void {
     const tagPart = p.tag ? `${MAGENTA}${tagText}${RESET}${bg}` : '';
     const desc = `${tagPart}${DIM}${descText}${RESET}`;
 
-    patchLineIndex[i] = lines.length;
-    lines.push(`${pointer}${checkbox} ${glyphPart} ${name}${pad}${desc}${RESET}`);
+    patchLineIndex[i] = body.length;
+    body.push(`${pointer}${checkbox} ${glyphPart} ${name}${pad}${desc}${RESET}`);
     visibleCount++;
   }
 
   if (visibleCount === 0 && query) {
-    lines.push('');
-    lines.push(`  ${DIM}no patches match "${query}"${RESET}`);
+    body.push('');
+    body.push(`  ${DIM}no patches match "${query}"${RESET}`);
   }
 
-  // Footer
-  lines.push('');
+  return { body, patchLineIndex, visibleCount };
+}
+
+function buildFooter(): string[] {
+  const out: string[] = [''];
+
+  // Status line: enabled count + unsaved marker + active filter.
+  // Always rendered (even when empty extras) so footer height stays
+  // constant across renders — keeps the scroll math simple.
+  const enabledCount = states.filter(Boolean).length;
+  const parts: string[] = [`${DIM}${enabledCount}/${allPatchList.length} enabled${RESET}`];
+  if (dirty) parts.push(`${YELLOW}● unsaved${RESET}`);
+  if (query && !searchMode) parts.push(`${CYAN}/${query}${RESET}`);
+  out.push(`  ${parts.join(`  ${DIM}·${RESET}  `)}`);
+
+  // Keybinding bar — the whole point of pinning the footer. Rendered
+  // in bracket-hint style so new users can tell at a glance which
+  // keys do what without having to hunt for documentation.
   if (searchMode) {
-    lines.push(`  ${CYAN}/${RESET}${query}${DIM}█${RESET}    ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}enter${RESET} save  ${DIM}esc${RESET} exit find`);
+    out.push(`  ${CYAN}find:${RESET} ${query}${DIM}█${RESET}    ${DIM}[${RESET}↑↓${DIM}]${RESET} nav  ${DIM}[${RESET}space${DIM}]${RESET} toggle  ${DIM}[${RESET}enter${DIM}]${RESET} save  ${DIM}[${RESET}esc${DIM}]${RESET} exit find`);
   } else if (resetPending) {
-    lines.push(`  ${YELLOW}Press r again to reset all patches to defaults${RESET}`);
+    out.push(`  ${YELLOW}Press r again to reset all patches to their defaults${RESET}`);
   } else {
-    let footer = `  ${DIM}↑↓${RESET} navigate  ${DIM}space${RESET} toggle  ${DIM}/${RESET} find  ${DIM}r${RESET} reset  ${DIM}enter${RESET} save  ${DIM}esc${RESET} cancel`;
-    if (query) {
-      footer += `    ${CYAN}/${query}${RESET}`;
-    }
-    if (dirty) {
-      footer += `    ${YELLOW}● unsaved${RESET}`;
-    }
-    lines.push(footer);
+    out.push(`  ${DIM}[${RESET}↑↓${DIM}]${RESET} nav  ${DIM}[${RESET}space${DIM}]${RESET} toggle  ${DIM}[${RESET}/${DIM}]${RESET} find  ${DIM}[${RESET}r${DIM}]${RESET} reset  ${DIM}[${RESET}enter${DIM}]${RESET} save  ${DIM}[${RESET}esc${DIM}]${RESET} cancel`);
   }
+
+  return out;
+}
+
+function render(): void {
+  const rows = process.stdout.rows || 24;
+  const cols = process.stdout.columns || 80;
+
+  const header = buildHeader();
+  const { body, patchLineIndex } = buildBody(cols);
+  const footer = buildFooter();
 
   const prefix = CLEAR + HIDE_CURSOR;
 
-  // No trailing newline in either path below — if the content ends
-  // exactly on the bottom row, a final `\n` triggers a 1-line scroll
-  // and pushes the top line (including the `↑ more` indicator) out
-  // of view.
+  // No trailing newline below — if content ends exactly on the bottom
+  // row, a final `\n` triggers a 1-line scroll and pushes the top
+  // line (including the `↑ more` indicator) out of view.
 
-  // Everything fits — render as-is
-  if (lines.length <= rows) {
-    process.stdout.write(prefix + lines.join('\n'));
+  const availableForBody = Math.max(1, rows - header.length - footer.length);
+
+  // ── Fit mode ─────────────────────────────────────────────
+  // Body fits without scroll — render naturally. Footer lands
+  // right after the last body row and stays visible because
+  // the whole render is shorter than `rows`.
+  if (body.length <= availableForBody) {
+    process.stdout.write(prefix + [...header, ...body, ...footer].join('\n'));
     return;
   }
 
-  // Scrolling — reserve 2 lines for indicators
-  const usable = Math.max(1, rows - 2);
+  // ── Scroll mode ──────────────────────────────────────────
+  // Body overflows. Reserve 2 lines inside the body region for
+  // ↑more/↓more indicators, then slice a window of the body
+  // around the cursor. Pad the window to exactly `bodyRows`
+  // lines so the footer stays glued to the bottom of the
+  // terminal — this is the whole reason the keybinding bar
+  // stays visible regardless of patch count.
+  const indicatorRows = 2;
+  const bodyRows = Math.max(1, availableForBody - indicatorRows);
+
   const target = patchLineIndex[cursor] ?? 0;
-  let scrollTop = Math.max(0, target - Math.floor(usable / 2));
-  scrollTop = Math.min(scrollTop, lines.length - usable);
+  const maxScrollTop = Math.max(0, body.length - bodyRows);
+  let scrollTop = Math.max(0, target - Math.floor(bodyRows / 2));
+  scrollTop = Math.min(scrollTop, maxScrollTop);
 
-  const visible = lines.slice(scrollTop, scrollTop + usable);
-  const top = scrollTop > 0 ? `  ${DIM}↑ more${RESET}` : '';
-  const bottom = scrollTop + usable < lines.length ? `  ${DIM}↓ more${RESET}` : '';
+  const windowContent = body.slice(scrollTop, scrollTop + bodyRows);
+  while (windowContent.length < bodyRows) windowContent.push('');
 
-  // Exactly `rows` lines joined by `rows - 1` newlines.
-  process.stdout.write(prefix + [top, ...visible, bottom].join('\n'));
+  const topInd = scrollTop > 0 ? `  ${DIM}↑ more${RESET}` : '';
+  const botInd = scrollTop + bodyRows < body.length ? `  ${DIM}↓ more${RESET}` : '';
+
+  // Exactly `rows` lines (header + 1 + bodyRows + 1 + footer = rows)
+  // joined by `rows - 1` newlines.
+  process.stdout.write(
+    prefix + [...header, topInd, ...windowContent, botInd, ...footer].join('\n')
+  );
 }
 
 // ── Input handling ────────────────────────────────────────────────────────

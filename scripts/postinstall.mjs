@@ -1,25 +1,58 @@
 #!/usr/bin/env node
 /**
- * Post-install banner — prints the available commands and checks that
- * @anthropic-ai/claude-code is installed globally (cx patches it at
- * runtime, so it's a hard requirement).
+ * Post-install banner — tells the user what to run next and checks
+ * that @anthropic-ai/claude-code is installed globally (cx patches
+ * it at runtime, so it's a hard requirement).
  *
- * Best-effort: any failure here must not fail the install. Every path
- * is wrapped in try/catch and we always exit 0.
+ * Two gotchas baked in:
+ *
+ * 1. Dev tree. `scripts/postinstall.mjs` is published in the tarball,
+ *    but npm ALSO runs it for every `npm install` inside the cx source
+ *    repo. Skip when `../src` exists — that means we're sitting in
+ *    the checkout, not an installed package, and the banner would
+ *    just be noise during development.
+ *
+ * 2. npm 9+ runs postinstall scripts in the background and captures
+ *    their stdout, so `process.stdout.write(...)` gets silently
+ *    swallowed during a normal `npm install -g`. The only way the
+ *    user sees it is by passing `--foreground-scripts`, which nobody
+ *    does. Fix: open `/dev/tty` directly — that's the user's
+ *    controlling terminal regardless of how stdout is piped, so it
+ *    sidesteps npm's capture. Falls back to `process.stdout` on
+ *    Windows and in truly non-interactive contexts (CI, `docker run`
+ *    without `-it`) so CI logs still get something.
+ *
+ * Best-effort: any failure here must not fail the install. Every
+ * path is wrapped in try/catch and we always exit 0.
  */
 
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, openSync, writeSync, closeSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+
+/**
+ * Write to the user's controlling terminal, even when npm has
+ * captured stdout. `/dev/tty` bypasses the pipe that npm set up
+ * around our process; if it's not available (Windows, no controlling
+ * tty) we fall back to stdout.
+ */
+function writeToTerminal(text) {
+  if (process.platform !== 'win32') {
+    try {
+      const fd = openSync('/dev/tty', 'w');
+      writeSync(fd, text);
+      closeSync(fd);
+      return;
+    } catch { /* no /dev/tty — fall through */ }
+  }
+  try { process.stdout.write(text); } catch { /* stdout closed */ }
+}
 
 try {
   const __dirname = dirname(fileURLToPath(import.meta.url));
 
-  // Skip when running from the cx dev repo — the presence of `src/` next
-  // to this script means we're sitting in the source tree, not an
-  // installed package, so the banner would just be noise for every
-  // `npm install` during development.
+  // Dev tree check — see file header.
   if (existsSync(resolve(__dirname, '..', 'src'))) {
     process.exit(0);
   }
@@ -53,34 +86,31 @@ try {
 
   const lines = [];
   lines.push('');
-  lines.push(`  ${bold(cyan('cx'))} ${dim('— Claude Code Extensions installed')}`);
-  lines.push('');
-  lines.push(`  ${bold('Commands')}`);
-  lines.push(`    ${cyan('cx')}           ${dim('launch patched Claude Code (all claude args pass through)')}`);
-  lines.push(`    ${cyan('cx-setup')}     ${dim('interactive TUI to toggle patches on/off')}`);
-  lines.push(`    ${cyan('cx-list')}      ${dim('print the enabled/disabled patch list')}`);
-  lines.push('');
-  lines.push(`  ${bold('Quick start')}`);
-  lines.push(`    ${dim('$')} ${cyan('cx')}                     ${dim('# first run opens setup, then launches claude')}`);
-  lines.push(`    ${dim('$')} ${cyan('cx --model sonnet')}      ${dim('# flags pass through to claude')}`);
+  lines.push(`  ${bold(cyan('cx'))} ${dim('— Claude Code Extensions installed')} ${green('✓')}`);
   lines.push('');
 
+  // Loudest element: the one thing the user should do next. Put it
+  // above everything else so it's impossible to miss.
   if (hasClaude) {
-    lines.push(`  ${green('✔')} ${dim('@anthropic-ai/claude-code detected in global npm root')}`);
+    lines.push(`  ${bold(green('▶'))} ${bold('Run')} ${bold(cyan('cx'))} ${bold('to get started')}`);
+    lines.push(`    ${dim('opens a one-time setup, then launches Claude Code')}`);
   } else {
     lines.push(`  ${yellow('⚠')}  ${bold('@anthropic-ai/claude-code is not installed globally')}`);
-    lines.push(`    ${dim('cx patches it at runtime, so you need it on your PATH. Install it with:')}`);
+    lines.push(`    ${dim('cx patches it at runtime — install it first, then run cx:')}`);
     lines.push('');
     lines.push(`    ${dim('$')} ${cyan('npm install -g @anthropic-ai/claude-code')}`);
+    lines.push(`    ${dim('$')} ${cyan('cx')}`);
   }
 
+  lines.push('');
+  lines.push(`  ${dim('Other commands')}`);
+  lines.push(`    ${cyan('cx-setup')}   ${dim('reopen the setup TUI later')}`);
+  lines.push(`    ${cyan('cx-list')}    ${dim('show enabled patches')}`);
   lines.push('');
   lines.push(`  ${dim('Docs: ')}${cyan('https://cx.worms.coffee')}`);
   lines.push('');
 
-  try {
-    process.stdout.write(lines.join('\n') + '\n');
-  } catch { /* stdout closed — ignore */ }
+  writeToTerminal(lines.join('\n') + '\n');
 } catch {
   /* never fail the install */
 }

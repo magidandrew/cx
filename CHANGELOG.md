@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.9] — 2026-04-11
+
+### Changes
+
+- **cx setup** — The keybinding footer is now pinned to the bottom row of the terminal instead of being part of the scrolling patch list, so new users always see how to navigate/toggle/save even when the list overflows the window. `render()` is split into `buildHeader` / `buildBody` / `buildFooter` and composes them at draw time: in fit mode the footer lands right after the last body row, and in scroll mode a fixed-height body window with `↑ more` / `↓ more` indicators keeps the footer glued to the last line. Added a status line showing `X/N enabled`, unsaved marker, and active filter at a glance, and reworked the keybinding bar to bracket-hint style (`[↑↓] nav  [space] toggle  [/] find  [r] reset  [enter] save  [esc] cancel`) so it's obvious which chars are keys vs. labels. The first-run welcome block now tells users up front that `space` toggles and `enter` saves.
+- **postinstall banner** — Fixed the banner being silently swallowed on a normal `npm install -g claude-code-extensions`. Since npm 9, postinstall scripts run in the background with stdout captured unless `--foreground-scripts` is passed, so nobody was seeing the "what to run next" hint. `scripts/postinstall.mjs` now opens `/dev/tty` directly and writes there, which is the user's controlling terminal regardless of how stdout is piped — sidesteps npm's capture entirely. Falls back to `process.stdout` on Windows and in non-interactive contexts (CI, `docker run` without `-it`) so CI logs still get something. Also restructured the banner so `▶ Run cx to get started` is the loudest thing on screen, above the command reference — when the peer isn't installed, the CTA flips to a two-step `npm install -g @anthropic-ai/claude-code` → `cx` recipe.
+
 ## [0.2.8] — 2026-04-11
 
 ### Fixes
