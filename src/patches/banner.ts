@@ -79,7 +79,7 @@ const patch: Patch = {
     const textComp = src(boldTextCall.arguments[0]);   // e.g. "T"
     const boxComp = src(columnBox.arguments[0]);       // e.g. "u"
 
-    const starText = `${reactNs}.createElement(${textComp},{dimColor:!0},"I don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`;
+    const starText = `${reactNs}.createElement(${textComp},{dimColor:!0},"I don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx \\uD83D\\uDC49\\uD83D\\uDC48")`;
 
     editor.insertAt(titleChild.end,
       `,${starText}`);
@@ -105,7 +105,7 @@ const patch: Patch = {
       // Get React namespace from this scope
       const boxReactNs = src(boxCall.callee.object);
       editor.insertAt(lastArg.end,
-        `,${boxReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`);
+        `,${boxReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx \\uD83D\\uDC49\\uD83D\\uDC48")`);
       break;
     }
 
@@ -127,7 +127,7 @@ const patch: Patch = {
       const wideReactNs = src(wideGroupCall.callee.object);
       const wideLastArg = wideGroupCall.arguments[wideGroupCall.arguments.length - 1];
       editor.insertAt(wideLastArg.end,
-        `,${wideReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`);
+        `,${wideReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx \\uD83D\\uDC49\\uD83D\\uDC48")`);
     }
 
     // ── Boxed layout: b7("claude",o)("Claude Code") ──

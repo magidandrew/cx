@@ -22,6 +22,12 @@ permissions:
   contents: read
   issues: write
 
+# Opt every javascript action (e.g. actions/upload-artifact@v4) into
+# Node 24. Without this the runner emits a deprecation warning about
+# Node 20 until GitHub forces the switch on 2026-06-02.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test:
     runs-on: ubuntu-latest
