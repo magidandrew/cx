@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.7] — 2026-04-11
+
+### Fixes
+
+- **session-usage** — The `25% session used · 15% context used` indicator silently stopped showing on `claude-code >= 2.1.97`. The Notifications parent stopped rendering `<TokenWarning />` as plain JSX and started registering it via `addNotification(...)` inside a `useEffect` gated on `isAboveWarningThreshold` — so even with the in-component early-return removed, the parent never mounted TokenWarning until you crossed the warning threshold and the indicator never appeared during normal use. The patch now also rewrites that parent gate's leftmost leaf to `!0`, so the notification gets registered regardless of usage. Old bundles that render TokenWarning as plain JSX hit a silent no-op.
+
 ## [0.2.6] — 2026-04-11
 
 ### Fixes

@@ -1,6 +1,6 @@
 {
   "name": "claude-code-extensions",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Modular, opt-in patches for @anthropic-ai/claude-code applied at runtime via AST transformation",
   "type": "module",
   "bin": {
@@ -10,11 +10,13 @@
     "cx-reload": "./dist/cli-reload.js"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "scripts/postinstall.mjs"
   ],
   "scripts": {
     "build": "tsc",
     "link": "tsc && npm link",
+    "postinstall": "node scripts/postinstall.mjs",
     "prepublishOnly": "npm run build",
     "test:patches": "bun scripts/test-patches.ts",
     "docs:dev": "vitepress dev docs",

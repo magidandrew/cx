@@ -32,6 +32,17 @@
  *    useSyncExternalStore call bound to a module-level ticker. The
  *    subscribe/snapshot closures are defined at module scope so
  *    they're stable across renders and React doesn't resubscribe.
+ * 8. Disable the *parent-side* warning gate that was added in
+ *    claude-code 2.1.97+. The Notifications parent stopped rendering
+ *    `<TokenWarning />` as plain JSX and started registering it via
+ *    `addNotification(...)` inside a useEffect gated on
+ *    `isAboveWarningThreshold`, so dropping the in-component gate in
+ *    step 3 is no longer enough — the parent never even mounts the
+ *    component until you cross the threshold. We rewrite the gate's
+ *    leftmost leaf (`isAboveWarningThreshold`) to `!0` so the
+ *    addNotification path runs unconditionally. Older bundles render
+ *    TokenWarning as plain JSX with no parent gate, so this step is a
+ *    silent no-op when the pattern isn't found.
  */
 
 import type { Patch } from '../types.js';
@@ -255,6 +266,56 @@ const patch: Patch = {
     editor.insertAt(fn.body.start + 1,
       `${R}.useSyncExternalStore(__cxsusSub,__cxsusGet);`
     );
+
+    // ── 8. Disable the parent-side gate (claude-code 2.1.97+) ───────
+    //
+    // In 2.1.97+ the Notifications parent registers TokenWarning via
+    // the notification system, gated on isAboveWarningThreshold:
+    //
+    //   useEffect(() => {
+    //     if (isAboveWarningThreshold && !suppressed && !briefOnly)
+    //       addNotification({key:"token-warning",
+    //                        jsx: createElement(TokenWarning, ...)})
+    //     else
+    //       removeNotification("token-warning")
+    //   }, [...])
+    //
+    // We find that IfStatement by looking for an `&&`-chain test
+    // whose consequent contains a `createElement(<TokenWarningName>,…)`
+    // call, then walk the leftmost leaf of the chain (which is the
+    // bare `isAboveWarningThreshold` identifier) and replace it with
+    // `!0`. The chain `!0 && !suppressed && !briefOnly` collapses to
+    // `!suppressed && !briefOnly`, so the notification gets registered
+    // regardless of usage and our patched TokenWarning actually mounts.
+    //
+    // Silent no-op on older bundles that render TokenWarning as plain
+    // JSX (no IfStatement matches the predicate, so we skip cleanly).
+    const fnName = (fn as any).id?.name;
+    if (fnName) {
+      const ifStatements = index.nodesByType.get('IfStatement') || [];
+      let parentGate: any = null;
+      for (const ifs of ifStatements) {
+        if (ifs.test?.type !== 'LogicalExpression' || ifs.test.operator !== '&&') continue;
+        const ce = findFirst(ifs.consequent, (n: any) =>
+          n.type === 'CallExpression' &&
+          n.callee?.type === 'MemberExpression' &&
+          n.callee.property?.type === 'Identifier' &&
+          n.callee.property.name === 'createElement' &&
+          n.arguments?.[0]?.type === 'Identifier' &&
+          n.arguments[0].name === fnName
+        );
+        if (ce) { parentGate = ifs; break; }
+      }
+      if (parentGate) {
+        let leaf = parentGate.test;
+        while (leaf.type === 'LogicalExpression' && leaf.operator === '&&') {
+          leaf = leaf.left;
+        }
+        if (leaf?.type === 'Identifier') {
+          editor.replaceRange(leaf.start, leaf.end, '!0');
+        }
+      }
+    }
   },
 };
 
