@@ -5,6 +5,7 @@
 # cx — Claude Code Extensions
 
 [![npm](https://img.shields.io/npm/v/claude-code-extensions)](https://www.npmjs.com/package/claude-code-extensions)
+[![npm downloads](https://img.shields.io/npm/dm/claude-code-extensions)](https://www.npmjs.com/package/claude-code-extensions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/node/v/claude-code-extensions)](https://nodejs.org)
 
