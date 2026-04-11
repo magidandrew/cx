@@ -10,6 +10,7 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | --- | --- | --- | :---: | --- |
 | `queue` | [Ctrl+Q Message Queue](./queue) | Queue messages with `Ctrl+Q` to run sequentially after the current turn | on | `*` |
 | `cut-to-clipboard` | [Cut prompt to clipboard (Alt+X)](./cut-to-clipboard) | `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input | on | `*` |
+| `delete-sessions` | [Delete Sessions from /resume](./delete-sessions) | `Opt+D` in the resume picker deletes the focused session (confirm by pressing `Opt+D` again) | on | `*` |
 | `reload` | [Ctrl+X Ctrl+R Reload](./reload) | Reload the cx session — re-applies patches and keeps the conversation | on | `*` |
 | `always-show-thinking` | [Always Show Thinking](./always-show-thinking) | Show thinking block content inline instead of collapsed | on | `*` |
 | `session-usage` | [Session Usage](./session-usage) | Always show `"25% session used · 15% context used"` | on | `*` |
@@ -32,6 +33,7 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | `banner` | [Attribution Banner](./banner) | Show "@wormcoffee" on the Claude Code title line | on | `*` |
 | `swap-enter-submit` | [Swap Enter / Meta+Enter](./swap-enter-submit) | Enter inserts a newline, Option/Alt+Enter submits | off | `*` |
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
+| `nsfw-spinner` | [NSFW Spinner](./nsfw-spinner) | Replace spinner verbs with NSFW ones (tagged `[nsfw]`, conflicts with `simple-spinner`) | off | `*` |
 | `rename-random-color` | [Random Color on /rename](./rename-random-color) | Randomize the prompt-bar color each time you run /rename | off | `*` |
 
 ## Toggling patches

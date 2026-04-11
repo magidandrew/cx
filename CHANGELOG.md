@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.5] — 2026-04-11
+
+### New patches
+
+- **delete-sessions** — `Opt+D` in the `/resume` picker stages the focused session for deletion; a second `Opt+D` deletes the `.jsonl` transcript plus the per-session directories under `.claude/file-history`, `.claude/session-env`, and the sibling subagent dir. Any other key cancels. Adds an `Opt+D Delete` hint to the picker's keyboard-shortcut row. Addresses [anthropics/claude-code#13514](https://github.com/anthropics/claude-code/issues/13514).
+- **nsfw-spinner** — Replaces the rotating `SPINNER_VERBS` array with a NSFW word list. Tagged `[nsfw]`, off by default, conflicts with `simple-spinner`.
+
+### Changes
+
+- **cx setup** — Patches can now declare a `tag` (e.g. `nsfw`, `experimental`); the TUI renders it in magenta next to the description, with the truncation budget adjusted so tagged rows still fit the terminal width. Adjacent conflicting rows are now connected by a gutter glyph (`╮`/`│`/`╯`) so conflict pairs are visually linked, and toggling either side on forces the other off live (the transform already resolves the same way, but the TUI now reflects it immediately instead of silently dropping the loser at save time).
+- **banner** — Adds a "please star the repo" dim text line to the wide (LogoV2) Claude Code startup layout to match the existing condensed and boxed injections.
+
 ## [0.2.4] — 2026-04-10
 
 ### Fixes

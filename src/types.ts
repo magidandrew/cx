@@ -79,6 +79,11 @@ export interface Patch {
   description: string;
   defaultEnabled?: boolean;
   /**
+   * Short label shown next to the patch in the setup TUI (rendered as
+   * `[tag]`). Use for warnings like `nsfw`, `experimental`, etc.
+   */
+  tag?: string;
+  /**
    * Ids of other patches this one cannot coexist with (they edit the
    * same source region and would corrupt the bundle if both applied).
    * If both a patch and something it conflicts with are enabled, the
@@ -94,6 +99,7 @@ export interface PatchInfo {
   name: string;
   description: string;
   defaultEnabled?: boolean;
+  tag?: string;
   conflictsWith?: string[];
 }
 

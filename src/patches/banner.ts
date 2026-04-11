@@ -84,7 +84,7 @@ const patch: Patch = {
     editor.insertAt(titleChild.end,
       `,${starText}`);
 
-    // ── Boxed (v2) layout: inject star lines at the bottom ──
+    // ── Compact boxed (v2) layout: inject star lines at the bottom ──
     // Find the compact boxed container: createElement(u, {borderStyle:"round", borderColor:"claude", borderText:...})
     // and inject star lines after the last child (cwd line).
 
@@ -107,6 +107,27 @@ const patch: Patch = {
       editor.insertAt(lastArg.end,
         `,${boxReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`);
       break;
+    }
+
+    // ── Wide (LogoV2) layout: inject star line into the model+cwd group ──
+    // LogoV2.tsx: `t22 = <Box flexDirection="column" alignItems="center">{t20}{t21}</Box>`
+    // This is the bottom group inside the left column of the wide layout.
+    // Match: createElement(_, {flexDirection:"column", alignItems:"center"}, _, _)
+    // with exactly 2 props and exactly 2 children, uniquely identifying t22.
+    const wideGroupCall = find.findFirst(ast, (n: any) => {
+      if (n.type !== 'CallExpression') return false;
+      if (n.callee?.type !== 'MemberExpression' || n.callee.property?.name !== 'createElement') return false;
+      if (n.arguments.length !== 4) return false; // component, props, child, child
+      const props = n.arguments[1];
+      if (props?.type !== 'ObjectExpression' || props.properties.length !== 2) return false;
+      const propNames = props.properties.map((p: any) => `${p.key?.name}:${p.value?.value}`);
+      return propNames.includes('flexDirection:column') && propNames.includes('alignItems:center');
+    });
+    if (wideGroupCall) {
+      const wideReactNs = src(wideGroupCall.callee.object);
+      const wideLastArg = wideGroupCall.arguments[wideGroupCall.arguments.length - 1];
+      editor.insertAt(wideLastArg.end,
+        `,${wideReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx")`);
     }
 
     // ── Boxed layout: b7("claude",o)("Claude Code") ──

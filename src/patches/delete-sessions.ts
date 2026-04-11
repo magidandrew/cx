@@ -1,0 +1,382 @@
+/**
+ * Delete Sessions Patch
+ *
+ * Adds Option+D (Opt+D / Alt+D) to delete the focused session from
+ * the /resume picker. First Opt+D stages a confirmation overlay;
+ * second Opt+D actually deletes the .jsonl transcript and related
+ * per-session directories (file-history, session-env, and the sibling
+ * subagent dir under .claude/projects/<slug>/<sessionId>/). Any other
+ * key cancels.
+ *
+ * Addresses: https://github.com/anthropics/claude-code/issues/13514
+ *
+ * Why not Ctrl+D:
+ *   The bundle's Global keybinding map hardcodes
+ *   `"ctrl+d":"app:exit"`, and the keybinding manager calls
+ *   `stopImmediatePropagation()` on match — so the second Ctrl+D
+ *   gets swallowed by the exit handler before our `onKeyDown`
+ *   handler ever sees it. The reserved-binding list even flags it
+ *   as `"Cannot be rebound - used for exit (hardcoded)"`. Option+D
+ *   has no global binding, so our handler sees both presses cleanly.
+ *
+ * Why the patch is more than just "rm the file":
+ *
+ *  1. The resume picker's LogSelector is memoized via the React
+ *     Compiler, so adding confirmation UI that only appears when a
+ *     module-level flag is set would never re-render. We inject a
+ *     real `useState` hook near the top of LogSelector and drive the
+ *     confirmation *render* through it. Because the key handler is
+ *     also memoized (React Compiler caches the callback against a
+ *     fixed deps list that we can't easily extend), reading the
+ *     state value from the handler would give a stale closure — so
+ *     the handler reads/writes a companion `useRef` whose `current`
+ *     is always fresh at call time, then calls `setState` purely to
+ *     force a re-render.
+ *
+ *  2. ResumeConversation passes `onLogsChanged` conditionally on
+ *     `isCustomTitleEnabled()` — when that feature flag is off,
+ *     LogSelector has no way to refresh its list. We rewrite the
+ *     ternary so `onLogsChanged` is always passed, giving delete a
+ *     reliable refresh path.
+ *
+ *  3. After the final return statement we override `g3` (the rendered
+ *     root element) with a confirmation Box when the pending-delete
+ *     state is set. This keeps the normal memo cache intact — on
+ *     cancel we return the cached main UI unchanged.
+ *
+ *     CRITICAL: the current bundle delivers key events via an
+ *     `onKeyDown` prop on the root Box (not `useInput`), so our
+ *     confirmation Box MUST copy that same `onKeyDown` prop —
+ *     otherwise the handler gets detached the moment the override
+ *     renders, and the user's second Opt+D (or any cancel keystroke)
+ *     never reaches the handler. We discover the key handler's
+ *     variable name by finding the existing `onKeyDown` property in
+ *     LogSelector's createElement calls.
+ *
+ *  4. The discoverable keyboard shortcut hint row at the bottom of
+ *     the picker gets a new `Opt+D delete` entry, inserted right
+ *     after the existing `Ctrl+R rename` hint, so users know the
+ *     shortcut exists without having to read docs. The chord string
+ *     is `"opt+d"` — the bundle's chord parser (`Ae6`) maps
+ *     `opt`/`option`/`alt` to the same `.alt` token, and the display
+ *     formatter (`tJz.alt`) renders it as "Opt" on macOS with the
+ *     `modCase:"title"` format the other hints use.
+ *
+ * Variable discovery is driven by string markers from the original
+ * TSX ("tengu_session_rename_started", "Resume Session", prop names
+ * preserved through destructuring) so the patch is robust to the
+ * React Compiler and minifier choices.
+ */
+
+import type { Patch } from '../types.js';
+
+const patch: Patch = {
+  id: 'delete-sessions',
+  name: 'Delete Sessions from /resume',
+  description: 'Opt+D in the resume picker deletes the focused session (confirm by pressing Opt+D again)',
+
+  apply(ctx) {
+    const { ast, editor, find, query, src, index, assert } = ctx;
+    const { findFirst, findAll } = find;
+    const { getDestructuredName } = query;
+
+    // ── 1. Locate LogSelector function ──────────────────────────────
+    // It's the only function that contains BOTH the header string
+    // "Resume Session" and the "tengu_session_rename_started" event.
+    const logSelectorFn = findFirst(ast, (n: any) => {
+      if (n.type !== 'FunctionDeclaration' && n.type !== 'FunctionExpression') return false;
+      const hasHeader = findFirst(n, (c: any) =>
+        c.type === 'Literal' && c.value === 'Resume Session');
+      if (!hasHeader) return false;
+      return findFirst(n, (c: any) =>
+        c.type === 'Literal' && c.value === 'tengu_session_rename_started') !== null;
+    });
+    assert(logSelectorFn, 'Could not find LogSelector function');
+
+    // ── 2. Discover the React namespace from an existing useState call ──
+    const firstUseState = findFirst(logSelectorFn, (n: any) =>
+      n.type === 'CallExpression' &&
+      n.callee.type === 'MemberExpression' &&
+      n.callee.property.name === 'useState');
+    assert(firstUseState, 'Could not find useState call in LogSelector');
+    const reactNs = src(firstUseState.callee.object); // e.g. "Sq.default"
+
+    // ── 3. Discover onLogsChanged's minified name ─────────────────────
+    // LogSelector destructures its props into local names. The prop
+    // KEYS are preserved (they're string-literal keys in the caller's
+    // object expression), so we can look up by original name.
+    const propsDestructure = findFirst(logSelectorFn, (n: any) => {
+      if (n.type !== 'VariableDeclarator' || n.id.type !== 'ObjectPattern') return false;
+      return getDestructuredName(n.id, 'logs') !== null &&
+             getDestructuredName(n.id, 'onSelect') !== null &&
+             getDestructuredName(n.id, 'onCancel') !== null;
+    });
+    assert(propsDestructure, 'Could not find LogSelector props destructure');
+    const onLogsChangedVar = getDestructuredName(propsDestructure.id, 'onLogsChanged');
+    assert(onLogsChangedVar, 'Could not find onLogsChanged in LogSelector destructure');
+
+    // ── 4. Locate the key handler (the one passed to useInput) ────────
+    // It's a FunctionExpression containing "tengu_session_rename_started"
+    // with a single param (the ink key event).
+    const keyHandler = findFirst(logSelectorFn, (n: any) => {
+      if (n.type !== 'FunctionExpression' && n.type !== 'ArrowFunctionExpression') return false;
+      if (n.params.length !== 1) return false;
+      return findFirst(n, (c: any) =>
+        c.type === 'Literal' && c.value === 'tengu_session_rename_started') !== null;
+    });
+    assert(keyHandler, 'Could not find LogSelector key handler');
+    assert(keyHandler.body?.type === 'BlockStatement',
+      'Expected key handler to have a BlockStatement body');
+
+    const keyVar = keyHandler.params[0].name; // e.g. "g1"
+
+    // ── 5. Extract the focusedLog var from the rename if-statement ────
+    // The rename branch's test looks like `key.ctrl && key.key==="r" && focusedLog`.
+    // Walk up from the analytics call to its enclosing IfStatement, then
+    // take the rightmost Identifier in the test expression — that's the
+    // focusedLog variable (e.g. "q4").
+    const renameCall = findFirst(keyHandler, (n: any) =>
+      n.type === 'CallExpression' &&
+      n.arguments[0]?.type === 'Literal' &&
+      n.arguments[0].value === 'tengu_session_rename_started');
+    assert(renameCall, 'Could not find tengu_session_rename_started call');
+
+    let renameIf: any = renameCall;
+    while (renameIf && renameIf.type !== 'IfStatement') {
+      renameIf = index.parentMap.get(renameIf);
+    }
+    assert(renameIf, 'Could not find enclosing rename IfStatement');
+
+    let testNode: any = renameIf.test;
+    while (testNode.type === 'LogicalExpression') testNode = testNode.right;
+    assert(testNode.type === 'Identifier',
+      `Expected rightmost of rename test to be an Identifier, got ${testNode.type}`);
+    const focusedLogVar = testNode.name; // e.g. "q4"
+
+    // ── 6. Discover Box/Text component variable names ────────────────
+    // Box is used with {flexDirection: "column", ...}; Text with just
+    // {dimColor: true, ...}. Find one of each in LogSelector's createElements.
+    const boxCall = findFirst(logSelectorFn, (n: any) => {
+      if (n.type !== 'CallExpression') return false;
+      if (n.callee.type !== 'MemberExpression' || n.callee.property.name !== 'createElement') return false;
+      const props = n.arguments[1];
+      if (!props || props.type !== 'ObjectExpression') return false;
+      return props.properties.some((p: any) =>
+        p.type === 'Property' &&
+        p.key.type === 'Identifier' && p.key.name === 'flexDirection');
+    });
+    assert(boxCall, 'Could not find a Box createElement call');
+    const boxVar = src(boxCall.arguments[0]);
+
+    const textCall = findFirst(logSelectorFn, (n: any) => {
+      if (n.type !== 'CallExpression') return false;
+      if (n.callee.type !== 'MemberExpression' || n.callee.property.name !== 'createElement') return false;
+      const props = n.arguments[1];
+      if (!props || props.type !== 'ObjectExpression') return false;
+      // Text with {dimColor: true} and no layout props
+      const hasDimColor = props.properties.some((p: any) =>
+        p.type === 'Property' &&
+        p.key.type === 'Identifier' && p.key.name === 'dimColor');
+      const hasLayout = props.properties.some((p: any) =>
+        p.type === 'Property' &&
+        p.key.type === 'Identifier' &&
+        (p.key.name === 'flexDirection' || p.key.name === 'paddingLeft' || p.key.name === 'flexShrink'));
+      return hasDimColor && !hasLayout;
+    });
+    assert(textCall, 'Could not find a Text createElement call');
+    const textVar = src(textCall.arguments[0]);
+
+    // ── 6b. Discover the key handler variable name ──────────────────
+    // The current bundle attaches the key handler via an `onKeyDown`
+    // prop on the root Box (earlier bundles used `useInput`). Find any
+    // Property whose key is `onKeyDown` with an Identifier value — that
+    // identifier is what the confirmation Box needs to re-use, or
+    // every key after the first Ctrl+D goes into the void.
+    const onKeyDownProp = findFirst(logSelectorFn, (n: any) => {
+      if (n.type !== 'Property') return false;
+      const isOnKeyDown =
+        (n.key.type === 'Identifier' && n.key.name === 'onKeyDown') ||
+        (n.key.type === 'Literal' && n.key.value === 'onKeyDown');
+      return isOnKeyDown && n.value.type === 'Identifier';
+    });
+    assert(onKeyDownProp, 'Could not find onKeyDown prop on a LogSelector element');
+    const keyHandlerVar = onKeyDownProp.value.name;
+
+    // ── 6c. Locate the Ctrl+R KeyboardShortcutHint to discover its
+    //        component variable and as an anchor for inserting Ctrl+D ─
+    // The hint row renders entries like
+    //   createElement(l8, {chord: "ctrl+r", action: "rename", format: {...}})
+    // We look up the ctrl+r entry (which is always present) and inject
+    // a matching ctrl+d entry right after it.
+    const ctrlRHint = findFirst(logSelectorFn, (n: any) => {
+      if (n.type !== 'CallExpression') return false;
+      if (n.callee.type !== 'MemberExpression' || n.callee.property.name !== 'createElement') return false;
+      const props = n.arguments[1];
+      if (!props || props.type !== 'ObjectExpression') return false;
+      const chord = props.properties.find((p: any) =>
+        p.type === 'Property' &&
+        p.key.type === 'Identifier' && p.key.name === 'chord');
+      return !!chord && chord.value.type === 'Literal' && chord.value.value === 'ctrl+r';
+    });
+    assert(ctrlRHint, 'Could not find ctrl+r KeyboardShortcutHint call');
+    const shortcutHintVar = src(ctrlRHint.arguments[0]);
+
+    // ── 7. Locate the final return statement in LogSelector ─────────
+    // The terminal return is the main-UI return (returns an Identifier
+    // like `g3`). Early-return branches come before it.
+    const directReturns = findAll(logSelectorFn, (n: any) =>
+      n.type === 'ReturnStatement').filter((r: any) =>
+      index.enclosingFunction(r) === logSelectorFn);
+    assert(directReturns.length > 0, 'No return statements found in LogSelector');
+    directReturns.sort((a: any, b: any) => a.start - b.start);
+    const lastReturn = directReturns[directReturns.length - 1];
+    assert(lastReturn.argument?.type === 'Identifier',
+      'Expected final return to return an identifier (memoized root element)');
+    const rootVar = lastReturn.argument.name; // e.g. "g3"
+
+    // ── 8. Inject the useState hook at the top of LogSelector ────────
+    // Place it right before the first useState call so it sits in the
+    // same phase of the function as existing hooks.
+    let firstUseStateStmt: any = firstUseState;
+    while (firstUseStateStmt) {
+      const parent = index.parentMap.get(firstUseStateStmt);
+      if (!parent) break;
+      if (parent.type === 'BlockStatement' && parent === logSelectorFn.body) break;
+      firstUseStateStmt = parent;
+    }
+    assert(firstUseStateStmt && index.parentMap.get(firstUseStateStmt) === logSelectorFn.body,
+      'Could not find top-level statement wrapping the first useState');
+
+    // The ref holds the current pending-delete path and is read by
+    // the memoized key handler — refs are stable across renders so
+    // the handler's closure always sees the latest value.
+    // The state exists purely to trigger a re-render when the ref
+    // changes, so the confirmation overlay appears/disappears.
+    editor.insertAt(firstUseStateStmt.start,
+      `let __cxDR=${reactNs}.useRef(null),` +
+      `__cxDS=${reactNs}.useState(null),__cxDP=__cxDS[0],__cxSDP=__cxDS[1];`);
+
+    // ── 9. Inject Opt+D handling at the top of the key handler ──────
+    const keyBodyStart = keyHandler.body.start + 1; // inside the `{`
+
+    // The handler:
+    //  • Opt+D on a focused log sets pending or, if already pending,
+    //    deletes the .jsonl and related per-session directories, clears
+    //    pending, and calls onLogsChanged to refresh the list.
+    //  • Any other key while pending clears the pending state (so
+    //    navigation still works during the "confirm?" prompt).
+    //
+    // The modifier check is `(key.meta || key.alt)`: node's terminal
+    // input layer can set either flag depending on the terminal's
+    // Option-key mode (Terminal.app/iTerm can send Option as an Esc
+    // prefix — `.meta` — or as a raw alt modifier — `.alt`). We accept
+    // both so the binding works across common mac terminal setups.
+    //
+    // All fs/path/os calls are inside try/catch so a missing ancillary
+    // directory never blocks deletion of the main transcript.
+    const deleteHandler =
+      `if((${keyVar}.meta||${keyVar}.alt)&&${keyVar}.key==="d"&&${focusedLogVar}&&${focusedLogVar}.fullPath){` +
+        `if(typeof ${keyVar}.preventDefault==="function")${keyVar}.preventDefault();` +
+        `if(__cxDR.current===${focusedLogVar}.fullPath){` +
+          `try{` +
+            `const __cxFs=require("fs"),__cxPa=require("path"),__cxOs=require("os"),__cxH=__cxOs.homedir();` +
+            `const __cxDp=${focusedLogVar}.fullPath;` +
+            `try{__cxFs.unlinkSync(__cxDp)}catch(e){}` +
+            `const __cxSid=__cxPa.basename(__cxDp,".jsonl");` +
+            `const __cxTargets=[` +
+              `__cxPa.join(__cxPa.dirname(__cxDp),__cxSid),` +
+              `__cxPa.join(__cxH,".claude","file-history",__cxSid),` +
+              `__cxPa.join(__cxH,".claude","session-env",__cxSid)` +
+            `];` +
+            `for(const __cxR of __cxTargets){try{__cxFs.rmSync(__cxR,{recursive:true,force:true})}catch(e){}}` +
+          `}catch(e){}` +
+          `__cxDR.current=null;` +
+          `__cxSDP(null);` +
+          `if(typeof ${onLogsChangedVar}==="function")${onLogsChangedVar}();` +
+        `}else{` +
+          `__cxDR.current=${focusedLogVar}.fullPath;` +
+          `__cxSDP(${focusedLogVar}.fullPath);` +
+        `}` +
+        `return;` +
+      `}` +
+      `if(__cxDR.current){__cxDR.current=null;__cxSDP(null);}`;
+
+    editor.insertAt(keyBodyStart, deleteHandler);
+
+    // ── 10. Override the rendered root when pending-delete is set ────
+    // Inject right before the last return statement. If __cxDP holds
+    // a path, replace `rootVar` with a confirmation Box. When cleared,
+    // we return the cached main UI unchanged.
+    //
+    // The confirmation Box copies `onKeyDown` from the original root so
+    // keys still reach the handler — without this, the second Ctrl+D
+    // (and every cancel keystroke) silently drops on the floor.
+    const confirmOverride =
+      `if(__cxDP){` +
+        `${rootVar}=${reactNs}.createElement(${boxVar},{flexDirection:"column",paddingLeft:2,paddingTop:1,onKeyDown:${keyHandlerVar}},` +
+          `${reactNs}.createElement(${textVar},{bold:true,color:"red"},"Delete this session?"),` +
+          `${reactNs}.createElement(${textVar},{dimColor:true},String(__cxDP)),` +
+          `${reactNs}.createElement(${boxVar},{paddingTop:1},` +
+            `${reactNs}.createElement(${textVar},null,"Press "),` +
+            `${reactNs}.createElement(${textVar},{bold:true},"Opt+D"),` +
+            `${reactNs}.createElement(${textVar},null," again to confirm, any other key to cancel")` +
+          `)` +
+        `);` +
+      `}`;
+
+    editor.insertAt(lastReturn.start, confirmOverride);
+
+    // ── 10b. Insert an Opt+D hint into the keyboard shortcut row ─────
+    // Placed immediately after the existing Ctrl+R rename hint so the
+    // row reads "...Ctrl+V Preview · Ctrl+R Rename · Opt+D Delete · ..."
+    // The `"opt+d"` chord is normalized by the bundle's chord parser
+    // (Ae6) to the `.alt` token, and tJz.alt renders as "Opt" on macOS
+    // with the `modCase:"title"` format the other hints already use.
+    const optDHint =
+      `,${reactNs}.createElement(${shortcutHintVar},` +
+      `{chord:"opt+d",action:"delete",format:{modCase:"title",charCase:"upper"}})`;
+    editor.insertAt(ctrlRHint.end, optDHint);
+
+    // ── 11. Always pass onLogsChanged from ResumeConversation ────────
+    // The original code passes `isCustomTitleEnabled() ? () => loadLogs(...) : undefined`.
+    // We rewrite that ternary to always evaluate the `then` branch, so
+    // the delete handler can reliably refresh the list.
+    //
+    // Find the props object whose keys include both `onLogsChanged` and
+    // `onSelect` (that's the LogSelector invocation from the bundled
+    // ResumeConversation). If the onLogsChanged value is a conditional
+    // expression, replace it with the consequent.
+    const logSelectorInvocations = findAll(ast, (n: any) => {
+      if (n.type !== 'ObjectExpression') return false;
+      const hasOnLogs = n.properties.some((p: any) =>
+        p.type === 'Property' &&
+        ((p.key.type === 'Identifier' && p.key.name === 'onLogsChanged') ||
+         (p.key.type === 'Literal' && p.key.value === 'onLogsChanged')));
+      if (!hasOnLogs) return false;
+      return n.properties.some((p: any) =>
+        p.type === 'Property' &&
+        ((p.key.type === 'Identifier' && p.key.name === 'onSelect') ||
+         (p.key.type === 'Literal' && p.key.value === 'onSelect')));
+    });
+    assert(logSelectorInvocations.length >= 1,
+      'Could not find LogSelector invocation object with onLogsChanged');
+
+    let rewroteAtLeastOne = false;
+    for (const obj of logSelectorInvocations) {
+      const onLogsProp = obj.properties.find((p: any) =>
+        p.type === 'Property' &&
+        ((p.key.type === 'Identifier' && p.key.name === 'onLogsChanged') ||
+         (p.key.type === 'Literal' && p.key.value === 'onLogsChanged')));
+      if (!onLogsProp) continue;
+      const v = onLogsProp.value;
+      if (v?.type === 'ConditionalExpression') {
+        editor.replaceRange(v.start, v.end, src(v.consequent));
+        rewroteAtLeastOne = true;
+      }
+    }
+    assert(rewroteAtLeastOne,
+      'Could not rewrite onLogsChanged ternary on any LogSelector invocation');
+  },
+};
+
+export default patch;

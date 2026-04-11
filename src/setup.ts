@@ -42,7 +42,9 @@ const groups: Group[] = [
     'disable-text-truncation',
   ]},
   { label: 'Spinner', ids: [
-    'simple-spinner', 'no-tips',
+    // simple-spinner and nsfw-spinner must stay adjacent — they conflict,
+    // and the TUI draws a connector glyph between adjacent conflicting rows.
+    'simple-spinner', 'nsfw-spinner', 'no-tips',
   ]},
   { label: 'Input', ids: [
     'queue', 'swap-enter-submit', 'cut-to-clipboard', 'reload',
@@ -82,10 +84,42 @@ for (const g of groups) {
   if (valid.length) { sectionStarts[idx] = g.label; idx += valid.length; }
 }
 
+// id → position in allPatchList, for fast lookups in the toggle handler.
+const indexById = new Map<string, number>();
+allPatchList.forEach((p, i) => indexById.set(p.id, i));
+
+// Bidirectional conflict map. `conflictsWith` in the patch metadata is
+// directional at transform time (declarer wins), but in the TUI we treat
+// it as mutual exclusion: turning on either side forces the other off,
+// since saving both makes no sense — the transform would just drop one.
+const conflictMap = new Map<string, Set<string>>();
+for (const p of allPatchList) {
+  if (!p.conflictsWith?.length) continue;
+  for (const other of p.conflictsWith) {
+    if (!indexById.has(other)) continue;
+    if (!conflictMap.has(p.id)) conflictMap.set(p.id, new Set());
+    if (!conflictMap.has(other)) conflictMap.set(other, new Set());
+    conflictMap.get(p.id)!.add(other);
+    conflictMap.get(other)!.add(p.id);
+  }
+}
+
 const config = loadConfig();
 const states: boolean[] = allPatchList.map(p =>
   config.patches?.[p.id] !== undefined ? config.patches[p.id] : (p.defaultEnabled !== false)
 );
+// If a stale/hand-edited config has both sides of a conflict enabled,
+// drop the loser so the TUI opens in a state the transform would
+// actually produce. The declarer wins (matches transform resolution).
+for (const p of allPatchList) {
+  if (!p.conflictsWith?.length) continue;
+  const declarerIdx = indexById.get(p.id);
+  if (declarerIdx === undefined || !states[declarerIdx]) continue;
+  for (const otherId of p.conflictsWith) {
+    const i = indexById.get(otherId);
+    if (i !== undefined && states[i]) states[i] = false;
+  }
+}
 let cursor = 0;
 let dirty = false;
 let resetPending = false;
@@ -104,6 +138,7 @@ const DIM = `${ESC}[2m`;
 const RESET = `${ESC}[0m`;
 const GREEN = `${ESC}[32m`;
 const YELLOW = `${ESC}[33m`;
+const MAGENTA = `${ESC}[35m`;
 const CYAN = `${ESC}[36m`;
 const WHITE = `${ESC}[37m`;
 const BG_HIGHLIGHT = `${ESC}[48;5;236m`;
@@ -181,18 +216,36 @@ function ensureCursorVisible(): void {
   }
 }
 
+/** Gutter glyph showing that row i is linked to an adjacent conflicting
+ *  row as a mutex pair. Only draws when the partner is immediately adjacent,
+ *  in the same section, and currently visible — otherwise the line would
+ *  dangle toward nothing. */
+function conflictGlyph(i: number): string {
+  const conflicts = conflictMap.get(allPatchList[i].id);
+  if (!conflicts) return ' ';
+  const above = i > 0 && !sectionStarts[i] && isVisible(i - 1) ? i - 1 : -1;
+  const below = i < allPatchList.length - 1 && !sectionStarts[i + 1] && isVisible(i + 1) ? i + 1 : -1;
+  const linkAbove = above >= 0 && conflicts.has(allPatchList[above].id);
+  const linkBelow = below >= 0 && conflicts.has(allPatchList[below].id);
+  if (linkAbove && linkBelow) return '│';
+  if (linkBelow) return '╮';
+  if (linkAbove) return '╯';
+  return ' ';
+}
+
 function render(): void {
   const rows = process.stdout.rows || 24;
   const cols = process.stdout.columns || 80;
   const lines: string[] = [];
   const patchLineIndex: number[] = [];
 
-  // Max description width. The patch line prefix is `6 + maxId` visible
-  // chars (2 pointer + 1 checkbox + 1 space + id + 2 pad), leaving the
-  // rest for the description. Truncate with an ellipsis so lines never
-  // wrap — if they wrapped, each array entry would take >1 visual row
-  // and the scroll math (which assumes 1:1) would be wrong.
-  const maxDescWidth = Math.max(10, cols - (6 + maxId) - 1);
+  // Max description width. The patch line prefix is `8 + maxId` visible
+  // chars (2 pointer + 1 checkbox + 1 space + 1 glyph + 1 space + id +
+  // 2 pad), leaving the rest for the description. Truncate with an
+  // ellipsis so lines never wrap — if they wrapped, each array entry
+  // would take >1 visual row and the scroll math (which assumes 1:1)
+  // would be wrong.
+  const maxDescWidth = Math.max(10, cols - (8 + maxId) - 1);
 
   // Header
   lines.push('');
@@ -229,13 +282,24 @@ function render(): void {
     const checkbox = on ? `${GREEN}✔${RESET}${bg}` : `${DIM}○${RESET}${bg}`;
     const name = sel ? `${BOLD}${WHITE}${p.id}${RESET}${bg}` : p.id;
     const pad = ' '.repeat(maxId - p.id.length + 2);
-    const descText = p.description.length > maxDescWidth
-      ? p.description.slice(0, Math.max(1, maxDescWidth - 1)) + '…'
+    // Conflict gutter — 1 visible char between checkbox and name.
+    // Drawn in the same column on every row so conflict rows are
+    // visually linked by a continuous line segment.
+    const glyphChar = conflictGlyph(i);
+    const glyphPart = glyphChar === ' ' ? ' ' : `${DIM}${glyphChar}${RESET}${bg}`;
+    // Tag is rendered in the description column; its visible width
+    // eats into the description budget so long descriptions still
+    // truncate before wrapping.
+    const tagText = p.tag ? `[${p.tag}] ` : '';
+    const descBudget = Math.max(10, maxDescWidth - tagText.length);
+    const descText = p.description.length > descBudget
+      ? p.description.slice(0, Math.max(1, descBudget - 1)) + '…'
       : p.description;
-    const desc = `${DIM}${descText}${RESET}`;
+    const tagPart = p.tag ? `${MAGENTA}${tagText}${RESET}${bg}` : '';
+    const desc = `${tagPart}${DIM}${descText}${RESET}`;
 
     patchLineIndex[i] = lines.length;
-    lines.push(`${pointer}${checkbox} ${name}${pad}${desc}${RESET}`);
+    lines.push(`${pointer}${checkbox} ${glyphPart} ${name}${pad}${desc}${RESET}`);
     visibleCount++;
   }
 
@@ -361,11 +425,23 @@ export default function setup(opts?: SetupOptions): Promise<void> {
         return;
       }
 
-      // Space — toggle current visible row
+      // Space — toggle current visible row. When turning a patch ON,
+      // also turn OFF anything it conflicts with so the user never
+      // sees both sides of a mutual-exclusion pair enabled.
       if (key === ' ') {
         if (isVisible(cursor)) {
-          states[cursor] = !states[cursor];
+          const turningOn = !states[cursor];
+          states[cursor] = turningOn;
           dirty = true;
+          if (turningOn) {
+            const partners = conflictMap.get(allPatchList[cursor].id);
+            if (partners) {
+              for (const otherId of partners) {
+                const i = indexById.get(otherId);
+                if (i !== undefined && states[i]) states[i] = false;
+              }
+            }
+          }
         }
         if (resetPending) resetPending = false;
         render();

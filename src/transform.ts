@@ -126,6 +126,7 @@ export function listPatches(): PatchInfo[] {
     name: p.name,
     description: p.description,
     defaultEnabled: p.defaultEnabled,
+    tag: p.tag,
     conflictsWith: p.conflictsWith,
   }));
 }
