@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .cache/
+.test-cache/
 .cx-patches.json
 .cx-pid
 .DS_Store

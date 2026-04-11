@@ -260,13 +260,25 @@ export class SourceEditor implements PatchEditor {
 /**
  * Build the standard patch context from source + AST index + editor.
  * Shared by transform.ts (sequential) and workers (parallel).
+ *
+ * `version` is the semver of the claude-code bundle we're about to
+ * patch. It powers per-version patch variants — see PatchVariant in
+ * types.ts and the selection logic in transform.ts. Callers that
+ * can't determine the version should pass "0.0.0" so only catch-all
+ * ("*") variants match.
  */
-export function buildContext(source: string, index: ASTIndex, editor: PatchEditor): PatchContext {
+export function buildContext(
+  source: string,
+  index: ASTIndex,
+  editor: PatchEditor,
+  version: string,
+): PatchContext {
   return {
     ast: index.ast,
     source,
     editor,
     index,
+    version,
     find: {
       findFirst: (root, pred) => index.findFirst(root, pred),
       findAll: (root, pred) => index.findAll(root, pred),

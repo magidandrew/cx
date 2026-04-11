@@ -1,0 +1,148 @@
+name: Test patches against claude-code
+
+# Runs every morning (and on-demand) against the latest
+# @anthropic-ai/claude-code. Tries each cx patch in isolation so one
+# broken patch never hides another. On failure, opens or updates a
+# single tracking issue; on recovery, closes it.
+
+on:
+  schedule:
+    # 08:00 UTC daily. Anthropic typically publishes CC earlier in the
+    # day, so by this time the newest release has been up long enough
+    # for a test to be useful.
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'claude-code version to test (e.g. 2.1.101, or "latest")'
+        default: 'latest'
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: npm ci
+
+      # The script exits 1 if any patch failed. We deliberately let the
+      # job continue so downstream steps can build a report and manage
+      # the tracking issue — the final "Set job status" step fails the
+      # workflow at the end if anything broke.
+      - name: Run per-patch tester
+        id: test
+        continue-on-error: true
+        run: bun scripts/test-patches.ts "${{ github.event.inputs.version || 'latest' }}"
+
+      - name: Guard against missing report
+        run: |
+          if [ ! -f .test-cache/report.json ]; then
+            echo "::error::test-patches.ts did not produce a report — it crashed before the loop ran."
+            exit 1
+          fi
+
+      - name: Build issue body
+        run: |
+          VERSION=$(jq -r '.version'  .test-cache/report.json)
+          FAILED=$(jq  -r '.failed'   .test-cache/report.json)
+          PASSED=$(jq  -r '.passed'   .test-cache/report.json)
+          TS=$(jq      -r '.timestamp' .test-cache/report.json)
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          {
+            echo "**Tested against:** \`@anthropic-ai/claude-code@${VERSION}\`"
+            echo ""
+            echo "**Result:** ${PASSED} passed, ${FAILED} failed"
+            echo ""
+            echo "**Run:** [${{ github.run_id }}](${RUN_URL})"
+            echo ""
+            if [ "$FAILED" -gt 0 ]; then
+              echo "## Broken patches"
+              echo ""
+              jq -r '.results[] | select(.ok == false) | "- **`\(.id)`** — \(.error)"' .test-cache/report.json
+              echo ""
+            fi
+            echo "## All patches"
+            echo ""
+            jq -r '.results[] | if .ok then "- [x] `\(.id)`" else "- [ ] `\(.id)` — \(.error)" end' .test-cache/report.json
+            echo ""
+            echo "<sub>Auto-updated by \`test-patches.yml\` at ${TS}. This issue is managed automatically — it will be closed when all patches apply cleanly again.</sub>"
+          } > issue-body.md
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED"   >> "$GITHUB_OUTPUT"
+          echo "passed=$PASSED"   >> "$GITHUB_OUTPUT"
+        id: body
+
+      - name: Open, update, or close regression issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="[auto] cx patches broken against latest claude-code"
+          FAILED="${{ steps.body.outputs.failed }}"
+          VERSION="${{ steps.body.outputs.version }}"
+
+          # Ensure the label exists (no-op if already present).
+          gh label create "patch-regression" \
+            --color "d73a4a" \
+            --description "A cx patch stopped applying cleanly against claude-code" \
+            2>/dev/null || true
+
+          ISSUE=$(gh issue list \
+            --search "\"$TITLE\" in:title" \
+            --state open \
+            --json number \
+            -q '.[0].number // ""')
+
+          if [ "$FAILED" -gt 0 ]; then
+            if [ -n "$ISSUE" ]; then
+              echo "Updating existing issue #$ISSUE"
+              gh issue edit "$ISSUE" --body-file issue-body.md
+              gh issue comment "$ISSUE" --body "🔁 Still broken: $FAILED patch(es) failing against \`claude-code@${VERSION}\`. See issue body for current status."
+            else
+              echo "Opening new regression issue"
+              gh issue create \
+                --title "$TITLE" \
+                --body-file issue-body.md \
+                --label "patch-regression"
+            fi
+          else
+            if [ -n "$ISSUE" ]; then
+              echo "All patches green — closing issue #$ISSUE"
+              gh issue close "$ISSUE" --comment "✅ All patches now apply cleanly against \`claude-code@${VERSION}\`. Auto-closing."
+            else
+              echo "All patches green — no existing issue, nothing to do."
+            fi
+          fi
+
+      - name: Upload report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch-test-report
+          path: .test-cache/report.json
+          retention-days: 30
+
+      # Fail the workflow if the tester reported broken patches, so the
+      # Actions tab shows a red run (the tracking issue is only visible
+      # on the Issues tab).
+      - name: Set job status
+        run: |
+          FAILED="${{ steps.body.outputs.failed }}"
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED patch(es) failed against claude-code@${{ steps.body.outputs.version }}"
+            exit 1
+          fi

@@ -47,10 +47,36 @@ A single line right under the one-liner:
 
 - **ID** — the patch's `id` field from `src/patches/<file>.ts`. Always in backticks.
 - **Default** — matches the `defaultEnabled` field (defaults to `on` when absent).
-- **Compatible** — the Claude Code bundle version range. `*` until someone has a reason to narrow it.
+- **Compatible** — the Claude Code bundle version range(s) the patch supports.
 - **Source** — link to the patch file on the main branch.
 
 Separate the fields with middle dots (`·`), not pipes or commas.
+
+### Compatible ranges
+
+For a patch with a flat `apply` function, use `` `*` `` — it works on every version the daily test run has verified against, and the source has no version gate.
+
+For a patch with `variants` in its source, list every variant range in declaration order, joined by middle dots:
+
+```
+**Compatible** `>=2.1.97` · `<2.1.97`
+```
+
+Each range goes in its own backticks. The order should match the `variants` array in the patch source (newest first). If the variant uses `` `*` `` as a catch-all fallback, still write it explicitly rather than hiding it.
+
+When a patch has variants, the **How it works** section should also show the variant table — see `per-session-effort.md` for the format. Future readers skimming for "which version does this cover" should find the answer in two places: the metadata line for the TL;DR, the variant table for the details.
+
+### Updating the compatibility matrix
+
+`docs/patches/index.md` has two tables: the main patch list (with one **Compatible** column per row) and a **Version compatibility matrix** (per-patch × per-version grid of ✓ marks). Both are maintained by hand, informed by the output of `bun scripts/test-patches.ts <version>`.
+
+When you add a patch or change its variant ranges:
+
+1. Update the **Compatible** column in the main table to match the patch's metadata line.
+2. Add a new row to the matrix table, marking any versions you've verified against. Leave cells blank for versions you haven't tested — don't assume, and don't backfill.
+3. If the daily workflow discovers a new tested version, add it as a new column in the matrix and fill in the results.
+
+The `per-session-effort` row in the matrix annotates each ✓ with the variant that applied (`*(ternary variant)*`, `*(&& variant)*`). Copy that convention for any future multi-variant patch so readers can see which branch they're on at a glance.
 
 ## Writing style
 

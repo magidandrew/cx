@@ -74,6 +74,21 @@ if (!cliPath || !existsSync(cliPath)) {
   process.exit(1);
 }
 
+// Read the installed claude-code version from the package.json that
+// sits next to cli.js. Patches with per-version variants consult
+// this to pick the right implementation. Falls back to "0.0.0" if
+// the package.json is unreadable — that forces patches to pick a
+// catch-all variant ("*") or fail loudly with "no variant matches".
+function readClaudeVersion(): string {
+  try {
+    const pkgPath = resolve(dirname(cliPath!), 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    if (typeof pkg.version === 'string' && pkg.version) return pkg.version;
+  } catch { /* fall through */ }
+  return '0.0.0';
+}
+const claudeVersion = readClaudeVersion();
+
 // ── Cache ────────────────────────────────────────────────────────────────
 
 /**
@@ -99,7 +114,11 @@ function patchesMtime(): number {
 async function ensureCache(): Promise<void> {
   const enabled = getEnabledPatches();
   const stat = statSync(cliPath!);
-  const key = `${stat.size}:${stat.mtimeMs}:${patchesMtime()}:${[...enabled].sort().join(',')}`;
+  // `claudeVersion` is folded into the cache key alongside size/mtime
+  // so a reinstall or upgrade of @anthropic-ai/claude-code always picks
+  // up the matching variant — a stale cache from an older CC version
+  // would apply the wrong variant's edits and likely corrupt the bundle.
+  const key = `${stat.size}:${stat.mtimeMs}:${claudeVersion}:${patchesMtime()}:${[...enabled].sort().join(',')}`;
 
   let valid = false;
   if (existsSync(cachedCliPath) && existsSync(metaPath)) {
@@ -123,7 +142,7 @@ async function ensureCache(): Promise<void> {
     }, 100);
 
     const original = readFileSync(cliPath!, 'utf-8');
-    const patched = await transformAsync(original, enabled, {
+    const patched = await transformAsync(original, enabled, claudeVersion, {
       onReady() {
         clearInterval(timer);
         const up = total + 1;

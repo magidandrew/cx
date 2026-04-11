@@ -54,6 +54,7 @@ export default defineConfig({
               { text: 'Disable Paste Collapse', link: '/patches/disable-paste-collapse' },
               { text: 'Disable Long-Text Truncation', link: '/patches/disable-text-truncation' },
               { text: 'Persist Max Effort', link: '/patches/persist-max-effort' },
+              { text: 'Per-Session Effort', link: '/patches/per-session-effort' },
               { text: 'Ctrl+X Ctrl+R Reload', link: '/patches/reload' },
               { text: 'No Tips', link: '/patches/no-tips' },
               { text: 'No Feedback Prompts', link: '/patches/no-feedback' },

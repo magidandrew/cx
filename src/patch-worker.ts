@@ -7,9 +7,10 @@
 import { workerData, parentPort } from 'worker_threads';
 import * as acorn from 'acorn';
 import { ASTIndex, buildContext } from './ast.js';
+import { selectPatchApply } from './transform.js';
 import type { ASTNode, PatchWorkerData, SourceEdit, PatchEditor, Patch } from './types.js';
 
-const { source, patchId, patchesDir } = workerData as PatchWorkerData;
+const { source, patchId, patchesDir, version } = workerData as PatchWorkerData;
 
 try {
   const ast = acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true }) as unknown as ASTNode;
@@ -22,9 +23,14 @@ try {
     replaceRange(start: number, end: number, text: string) { edits.push({ pos: start, deleteCount: end - start, text }); },
   };
 
-  const ctx = buildContext(source, index, editor);
+  const ctx = buildContext(source, index, editor, version);
   const patchModule = await import(`${patchesDir}/${patchId}.js`);
-  (patchModule.default as Patch).apply(ctx);
+  const patch = patchModule.default as Patch;
+  const applyFn = selectPatchApply(patch, version);
+  if (!applyFn) {
+    throw new Error(`Patch "${patchId}" failed: no variant matches claude-code@${version}`);
+  }
+  applyFn(ctx);
 
   parentPort!.postMessage({ type: 'done', edits });
 } catch (err) {

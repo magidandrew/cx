@@ -1,8 +1,21 @@
 # Patches
 
-Every cx patch is a pure AST transform against the Claude Code bundle. Patches are opt-in and toggleable via `cx-setup`. The table below lists all available patches, their default state, and which versions of `@anthropic-ai/claude-code` they're known to work against.
+Every cx patch is a pure AST transform against the Claude Code bundle. Patches are opt-in and toggleable via `cx-setup`. The table below lists all available patches, their default state, and which versions of `@anthropic-ai/claude-code` they work against.
 
-> The **Compatible** column tracks the range of Claude Code bundle versions the patch has been verified against. `*` means the patch has no known version constraints.
+## Compatibility
+
+A [GitHub Actions workflow](https://github.com/magidandrew/cx/actions/workflows/test-patches.yml) runs every morning. It fetches the newest `@anthropic-ai/claude-code` from npm and applies every patch against it in isolation — one failure never masks another. If any patch breaks, the run opens or updates a tracking issue in [magidandrew/cx](https://github.com/magidandrew/cx/issues) listing the broken patches. When everything is green again, the issue auto-closes.
+
+**Last verified**
+- `@anthropic-ai/claude-code@2.1.101` — 27/27 patches applied cleanly
+- `@anthropic-ai/claude-code@2.1.96` — 27/27 patches applied cleanly
+
+### How to read the Compatible column
+
+- **`*`** — the patch uses a single AST strategy that works on every Claude Code version it has been tried against. Nothing is version-gated.
+- **`>=X.Y.Z`**, **`<X.Y.Z`**, etc. — the patch declares [per-version variants](/guide/how-it-works#per-version-variants) and the transform picks the right one at patch-time. Multiple ranges mean multiple variants are bundled.
+
+If you're running a CC version older than what's listed and a patch throws `no variant matches`, that's your cue to either upgrade CC or [open an issue](https://github.com/magidandrew/cx/issues/new) — the daily workflow only tests forward.
 
 ## All patches
 
@@ -19,6 +32,7 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | `disable-text-truncation` | [Disable Long-Text Truncation](./disable-text-truncation) | Show long input inline instead of collapsing into `[...Truncated text #N]` | on | `*` |
 | `persist-max-effort` | [Persist Max Effort](./persist-max-effort) | Save "max" effort to settings so it survives restarts | on | `*` |
 | `granular-effort` | [Granular Effort Slider](./granular-effort) | Replace the `/model` effort picker with a 1-9 numeric slider | on | `*` |
+| `per-session-effort` | [Per-Session Effort](./per-session-effort) | Stop settings-file effort changes from clobbering other running sessions | on | `>=2.1.97` · `<2.1.97` |
 | `no-tips` | [No Tips](./no-tips) | Hide spinner tips | on | `*` |
 | `no-feedback` | [No Feedback Prompts](./no-feedback) | Remove feedback survey prompts | on | `*` |
 | `no-npm-warning` | [No NPM Warning](./no-npm-warning) | Suppress the "switched from npm to native installer" nag | on | `*` |
@@ -35,6 +49,42 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
 | `nsfw-spinner` | [NSFW Spinner](./nsfw-spinner) | Replace spinner verbs with NSFW ones (tagged `[nsfw]`, conflicts with `simple-spinner`) | off | `*` |
 | `rename-random-color` | [Random Color on /rename](./rename-random-color) | Randomize the prompt-bar color each time you run /rename | off | `*` |
+
+## Version compatibility matrix
+
+Per-version test results from the most recent runs. A `✓` means the patch applied cleanly against that version; a blank means untested.
+
+| Patch | 2.1.96 | 2.1.101 |
+| --- | :---: | :---: |
+| `always-show-thinking` | ✓ | ✓ |
+| `anthropic-status-banner` | ✓ | ✓ |
+| `auto-rename-first-message` | ✓ | ✓ |
+| `banner` | ✓ | ✓ |
+| `cd-command` | ✓ | ✓ |
+| `cut-to-clipboard` | ✓ | ✓ |
+| `cx-badge` | ✓ | ✓ |
+| `cx-resume-commands` | ✓ | ✓ |
+| `disable-paste-collapse` | ✓ | ✓ |
+| `disable-telemetry` | ✓ | ✓ |
+| `disable-text-truncation` | ✓ | ✓ |
+| `granular-effort` | ✓ | ✓ |
+| `no-attribution` | ✓ | ✓ |
+| `no-feedback` | ✓ | ✓ |
+| `no-npm-warning` | ✓ | ✓ |
+| `no-tips` | ✓ | ✓ |
+| `nsfw-spinner` | ✓ | ✓ |
+| `per-session-effort` | ✓ *(ternary variant)* | ✓ *(`&&` variant)* |
+| `persist-max-effort` | ✓ | ✓ |
+| `queue` | ✓ | ✓ |
+| `random-clawd` | ✓ | ✓ |
+| `reload` | ✓ | ✓ |
+| `rename-random-color` | ✓ | ✓ |
+| `session-usage` | ✓ | ✓ |
+| `show-file-in-collapsed-read` | ✓ | ✓ |
+| `simple-spinner` | ✓ | ✓ |
+| `swap-enter-submit` | ✓ | ✓ |
+
+For the current, authoritative state across all versions, check the [Actions tab](https://github.com/magidandrew/cx/actions/workflows/test-patches.yml) — the workflow posts fresh results every morning.
 
 ## Toggling patches
 

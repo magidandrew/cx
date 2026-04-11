@@ -11,10 +11,37 @@ import { Worker } from 'worker_threads';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { ASTIndex, SourceEditor, buildContext } from './ast.js';
+import { matchesRange } from './semver.js';
 import * as allPatches from './patches/index.js';
-import type { Patch, PatchInfo, ASTNode, TransformCallbacks, WorkerMessage } from './types.js';
+import type { Patch, PatchContext, PatchInfo, ASTNode, TransformCallbacks, WorkerMessage } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Variant selection
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Resolve which `apply` function to run for a given patch + bundle
+ * version. Returns null if the patch declares variants but none match,
+ * which the caller turns into a "Patch X failed: no variant matches"
+ * error so the tester surfaces it as broken.
+ *
+ * Variants are checked in declaration order, so authors should put
+ * the newest version first and let older fallbacks trail behind.
+ *
+ * Exported so the workers can call the same selection logic.
+ */
+export function selectPatchApply(
+  patch: Patch,
+  version: string,
+): ((ctx: PatchContext) => void) | null {
+  if (patch.variants && patch.variants.length > 0) {
+    const v = patch.variants.find(v => matchesRange(version, v.version));
+    return v?.apply ?? null;
+  }
+  return patch.apply ?? null;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Patch resolution
@@ -70,6 +97,7 @@ function resolvePatches(only: string[] | null, exclude: string[] | null): Patch[
 
 export function transform(
   source: string,
+  version: string,
   only: string[] | null = null,
   exclude: string[] | null = null,
   callbacks: TransformCallbacks = {},
@@ -77,13 +105,19 @@ export function transform(
   const ast = acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true }) as unknown as ASTNode;
   const index = new ASTIndex(ast);
   const editor = new SourceEditor();
-  const ctx = buildContext(source, index, editor);
+  const ctx = buildContext(source, index, editor, version);
   const toApply = resolvePatches(only, exclude);
 
   callbacks.onReady?.();
   for (const patch of toApply) {
+    const applyFn = selectPatchApply(patch, version);
+    if (!applyFn) {
+      throw new Error(
+        `Patch "${patch.id}" failed: no variant matches claude-code@${version}`,
+      );
+    }
     try {
-      patch.apply(ctx);
+      applyFn(ctx);
     } catch (err) {
       throw new Error(`Patch "${patch.id}" failed: ${(err as Error).message}`);
     }
@@ -100,6 +134,7 @@ export function transform(
 export function transformAsync(
   source: string,
   patchIds: string[],
+  version: string,
   callbacks: TransformCallbacks = {},
 ): Promise<string> {
   const workerPath = resolve(__dirname, 'transform-worker.js');
@@ -107,7 +142,7 @@ export function transformAsync(
 
   return new Promise((res, rej) => {
     const worker = new Worker(workerPath, {
-      workerData: { source, patchIds, patchesDir },
+      workerData: { source, patchIds, patchesDir, version },
     });
     worker.on('message', (msg: WorkerMessage) => {
       if (msg.type === 'ready') callbacks.onReady?.();

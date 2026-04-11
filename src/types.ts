@@ -68,9 +68,33 @@ export interface PatchContext {
   index: ASTIndex;
   find: FindHelpers;
   query: QueryHelpers;
+  /**
+   * The semver of the claude-code bundle currently being patched
+   * (e.g. "2.1.101"). Reads from the package.json sibling of cli.js.
+   * May be "0.0.0" when the caller couldn't detect a version — in
+   * that case only catch-all ("*") variants will match.
+   */
+  version: string;
   src(node: ASTNode): string;
   assert(condition: unknown, message: string): void;
   getFunctionName(fn: ASTNode): string | null;
+}
+
+/**
+ * A single version-gated implementation of a patch. The transform
+ * picks the FIRST variant whose `version` range matches the target
+ * bundle's version, so variants should be ordered newest-first.
+ *
+ * Use a trailing `{ version: "*", apply: ... }` as a catch-all if you
+ * want an older form to keep working indefinitely; otherwise the
+ * transform throws when no variant matches, and the tester surfaces
+ * the patch as broken so you know to add a new variant.
+ *
+ * See `src/semver.ts` for the supported range syntax.
+ */
+export interface PatchVariant {
+  version: string;
+  apply(ctx: PatchContext): void;
 }
 
 export interface Patch {
@@ -91,7 +115,13 @@ export interface Patch {
    * declares the conflict keeps itself and removes the other.
    */
   conflictsWith?: string[];
-  apply(ctx: PatchContext): void;
+  /**
+   * Patches may provide either a flat `apply` (works on all versions)
+   * or a `variants` list (the transform picks the first matching one
+   * by version). Providing both is not supported — `variants` wins.
+   */
+  apply?(ctx: PatchContext): void;
+  variants?: PatchVariant[];
 }
 
 export interface PatchInfo {
@@ -111,12 +141,14 @@ export interface WorkerData {
   source: string;
   patchIds: string[];
   patchesDir: string;
+  version: string;
 }
 
 export interface PatchWorkerData {
   source: string;
   patchId: string;
   patchesDir: string;
+  version: string;
 }
 
 export type WorkerMessage =
