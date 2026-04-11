@@ -89,6 +89,118 @@ function readClaudeVersion(): string {
 }
 const claudeVersion = readClaudeVersion();
 
+// Our own version — used by the patch-failure handler to pre-fill
+// the GitHub issue template so users don't have to gather context.
+function readCxVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(__dirname, '..', 'package.json'), 'utf-8'));
+    if (typeof pkg.version === 'string' && pkg.version) return pkg.version;
+  } catch { /* fall through */ }
+  return 'unknown';
+}
+const cxVersion = readCxVersion();
+
+// ── Patch failure reporting ─────────────────────────────────────────────
+//
+// Called when transformAsync() rejects during startup — typically
+// because @anthropic-ai/claude-code shipped a minifier change and a
+// patch's AST selector no longer matches the new bundle. Prints a
+// friendly explanation with three options (update cx, open a pre-
+// filled issue, or disable the offending patch) and exits non-zero.
+
+/** Pulls the patch id and underlying error out of a transform rejection. */
+function parsePatchError(err: Error): { id: string | null; underlying: string } {
+  const m = /^Patch "([^"]+)" failed: (.+)$/s.exec(err.message);
+  if (!m) return { id: null, underlying: err.message };
+  return { id: m[1], underlying: m[2] };
+}
+
+/**
+ * Build a GitHub issue URL with the title and body pre-filled so the
+ * user only has to click "Submit". Context the maintainer needs
+ * (failing patch, error, both versions) is already inside.
+ */
+function buildIssueUrl(id: string | null, underlying: string): string {
+  const title = id
+    ? `patch "${id}" fails against claude-code@${claudeVersion}`
+    : `cx ${cxVersion} fails to patch claude-code@${claudeVersion}`;
+  const body =
+    (id ? `**Failing patch:** \`${id}\`\n\n` : '') +
+    `**Error:**\n\`\`\`\n${underlying}\n\`\`\`\n\n` +
+    `**Versions:**\n` +
+    `- cx: \`${cxVersion}\`\n` +
+    `- @anthropic-ai/claude-code: \`${claudeVersion}\`\n\n` +
+    `**Platform:** \`${process.platform} ${process.arch}\`, Node \`${process.version}\`\n`;
+  return (
+    'https://github.com/magidandrew/cx/issues/new?' +
+    'title=' + encodeURIComponent(title) +
+    '&body=' + encodeURIComponent(body)
+  );
+}
+
+/**
+ * Render the final error block after transformAsync() has rejected.
+ * `total` is the length of the enabled-patches list, needed so we
+ * can jump up to the offending patch line and mark it red before
+ * printing the explanation below the list.
+ */
+function reportPatchFailure(err: Error, enabled: string[]): void {
+  const { id, underlying } = parsePatchError(err);
+  const total = enabled.length;
+
+  // Mark the offending patch as a red ✘ in the in-place checklist.
+  // If the id can't be located (or the parse phase threw before any
+  // patch started), leave the checklist alone — partially-applied
+  // lines are still useful context.
+  if (id) {
+    const idx = enabled.indexOf(id);
+    if (idx >= 0) {
+      const up = total - idx;
+      process.stderr.write(
+        `\x1b[${up}A\r\x1b[31m  ✘ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`,
+      );
+    }
+  }
+
+  // Replace the "preparing" summary line at the top of the block
+  // with a red failure summary so the block header matches reality.
+  {
+    const up = total + 1;
+    process.stderr.write(
+      `\x1b[${up}A\r\x1b[31m  ◆ patch application failed\x1b[0m\x1b[K\x1b[${up}B\r`,
+    );
+  }
+
+  const issueUrl = buildIssueUrl(id, underlying);
+  const subject = id ? `patch "${id}"` : 'patch framework';
+
+  process.stderr.write(
+    `\n\x1b[31mcx: ${subject} could not be applied to claude-code@${claudeVersion}\x1b[0m\n` +
+    `\n` +
+    `    \x1b[2m${underlying}\x1b[0m\n` +
+    `\n` +
+    `  This usually means \x1b[1m@anthropic-ai/claude-code\x1b[0m was updated and\n` +
+    `  the patch's AST selector no longer matches the new bundle. A fix\n` +
+    `  may already be available:\n` +
+    `\n` +
+    `  \x1b[1m1. Update cx\x1b[0m — a newer version may already have a variant\n` +
+    `     for this claude-code build:\n` +
+    `       \x1b[36mnpm install -g claude-code-extensions@latest\x1b[0m\n` +
+    `\n` +
+    `  \x1b[1m2. Open an issue\x1b[0m if you're already on the latest cx. The\n` +
+    `     link below pre-fills the title, error, and versions:\n` +
+    `       \x1b[36m${issueUrl}\x1b[0m\n` +
+    `\n` +
+    (id
+      ? `  \x1b[1m3. Disable the patch\x1b[0m as a workaround — open \x1b[36mcx setup\x1b[0m\n` +
+        `     and uncheck \x1b[1m${id}\x1b[0m, then retry.\n` +
+        `\n`
+      : ''
+    ) +
+    `  Current: \x1b[2mcx ${cxVersion} · claude-code ${claudeVersion}\x1b[0m\n`,
+  );
+}
+
 // ── Cache ────────────────────────────────────────────────────────────────
 
 /**
@@ -142,19 +254,31 @@ async function ensureCache(): Promise<void> {
     }, 100);
 
     const original = readFileSync(cliPath!, 'utf-8');
-    const patched = await transformAsync(original, enabled, claudeVersion, {
-      onReady() {
-        clearInterval(timer);
-        const up = total + 1;
-        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-        process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ ready (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
-      },
-      onDone(id: string) {
-        const idx = enabled.indexOf(id);
-        const up = total - idx;
-        process.stderr.write(`\x1b[${up}A\r\x1b[32m  ✔ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`);
-      },
-    });
+    let patched: string;
+    try {
+      patched = await transformAsync(original, enabled, claudeVersion, {
+        onReady() {
+          clearInterval(timer);
+          const up = total + 1;
+          const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+          process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ ready (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
+        },
+        onDone(id: string) {
+          const idx = enabled.indexOf(id);
+          const up = total - idx;
+          process.stderr.write(`\x1b[${up}A\r\x1b[32m  ✔ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`);
+        },
+      });
+    } catch (err) {
+      // transformAsync rejected — almost always because a patch's
+      // AST selector stopped matching a newer claude-code bundle.
+      // Stop the "preparing" spinner (may still be ticking if the
+      // worker threw before onReady), then print a friendly block
+      // explaining what's going on and how to unblock themselves.
+      clearInterval(timer);
+      reportPatchFailure(err as Error, enabled);
+      process.exit(1);
+    }
 
     // Replace prepare line with summary
     const up = total + 1;
