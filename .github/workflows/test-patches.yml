@@ -135,12 +135,16 @@ jobs:
             fi
           fi
 
-      - name: Upload report as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: patch-test-report
-          path: .test-cache/report.json
-          retention-days: 30
+      # Echo the full JSON report into the log instead of uploading it
+      # as an artifact. actions/upload-artifact@v4 still ships Node 20,
+      # which trips a workflow-level deprecation annotation; a plain
+      # `cat` has the same diagnostic value for a ~3KB report and
+      # introduces no third-party action at all.
+      - name: Print report
+        run: |
+          echo "── .test-cache/report.json ──"
+          jq . .test-cache/report.json
+          echo "── end ──"
 
       # Fail the workflow if the tester reported broken patches, so the
       # Actions tab shows a red run (the tracking issue is only visible
