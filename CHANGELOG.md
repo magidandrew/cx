@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.10] — 2026-04-13
+
+### New patches
+
+- **no-multi-install-warning** — Suppresses the `"Warning: Multiple installations found"` nag that `claude update` and `claude doctor` print when both an npm and a native installation exist. cx requires the npm bundle alongside the native install, so the warning is always a false positive. On by default.
+- **remote-control-default-on** — Opts every new session into Remote Control by default. Explicit per-session config still wins. Off by default.
+
+### Removed
+
+- **delete-sessions** — Dropped the in-picker `Opt+D` delete flow. Accidental deletes were too easy, and `/resume`'s stock ergonomics have caught up.
+
+### Fixes
+
+- **auto-rename-first-message** — Cross-patch coupling with `rename-random-color` was silently disabled: `ctx.enabledPatches` was declared in `buildContext` but never populated by `transform()`/`transform-worker`, so the `wantColor` branch that picks a new color on the auto-rename path was always false. `transform()` now passes the resolved patch id set through, and the patch rerolls `AGENT_COLORS`, persists via `saveAgentColor`, and calls the zustand `store.setState` so the prompt bar updates immediately — mirroring what `/color` does after a manual `/rename`.
+- **banner** — Force the boxed `LogoV2` layout even when `CLAUDE_CODE_FORCE_FULL_LOGO` would have triggered the condensed early return. Keeps the repo-star dim line and attribution visible on every startup.
+- **cx-resume-commands** — The 2.1.101+ shutdown hint splits the resume command across two template chunks (`` `…claude ${Y}--resume ${_}…` ``), and the per-element pass couldn't see "claude --resume" across the `${worktreeFlag}` interpolation. The patch now walks every `TemplateLiteral` and, when an adjacent quasi pair ends in `"claude "` and starts with `"--resume"`/`"--continue"`, rewrites the trailing `"claude "` in the first chunk to `"cx "` in place.
+- **simple-spinner** — Capitalize `"Working"` / `"Worked"` to match the stock verbs (`"Thinking"`, `"Baked"`, …) so the replacement reads consistently in the UI.
+
+### New
+
+- **Auto-update on startup** — When npm reports a newer cx, `version-check` now installs it in-place, then signals the caller to re-exec so the new patches take effect on the current invocation. Still best-effort — every fs/network/spawn op is caught; failed installs print a manual-install hint and let the current version keep running. `CX_JUST_UPDATED=1` in env is the loop breaker after a successful update, and `postinstall` bails when `CX_AUTO_UPDATING=1` so the banner doesn't bleed through the update spinner.
+- **Auto-triage for patch regressions** — When the daily `test-patches` run finds a broken patch, the workflow now ships the failing report + GitHub context over SSH to a VPS where Claude Code (authed as the operator) debugs, fixes, and opens a PR. Posts an "attach to tmux" hint on the tracking issue so the operator can watch the session live. No-op when `TRIAGE_SSH_HOST` isn't set, so forks and pre-VPS runs keep working.
+
+### Internal
+
+- **Behavioral test suite** — `test/harness/` ships a shared fixture layer (downloads claude-code once per run, memoizes patched variants in a bounded LRU), and `test/patches/` has one `<patch-id>.test.ts` file per patch — each exercises the patch against an isolated bundle and asserts static markers, lifted pure-function outputs, and AST post-conditions. Runs via `bun test --max-concurrency=1` (parallel parsing of a 13 MB minified bundle blew RSS past 15 GB). `npm test` is the behavioral suite; `npm run test:patches` is the existing apply-only check.
+- **`ctx.enabledPatches` plumbed through** — `transform()` and `transform-worker` now pass the resolved patch id set into `buildContext`, so patches can consult `ctx.enabledPatches.has(other)` to conditionalize on another patch being enabled. Previously the field was declared but always empty.
+
 ## [0.2.9] — 2026-04-11
 
 ### Changes
