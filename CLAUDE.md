@@ -33,6 +33,23 @@ Do not run dist files during development — use bun on src/ instead.
 - `src/cli.ts` — cx entry point (cache, spawn, reload loop)
 - `src/setup.ts` — interactive patch configurator (`cx setup`)
 - `cc-source/` — reference copy of Claude Code source for patch authoring
+- `test/harness/` — per-patch test infrastructure (fixture cache, AST helpers, function extraction, spawn)
+- `test/patches/` — per-patch behavioral tests (one *.test.ts file per patch)
+- `scripts/test-patches.ts` — standalone check that every patch *applies* cleanly to a target version
+
+## Tests
+
+Two layers, both `bun`-native:
+
+```sh
+npm test                    # behavioral tests in test/patches/ — per-patch regression suite
+npm run test:patches        # apply-only check against @anthropic-ai/claude-code@latest
+CC_VERSION=2.1.101 bun test test/patches/banner.test.ts   # target a specific version
+```
+
+The behavioral suite uses `bun test` with `--max-concurrency=1` — parsing a 13MB minified bundle in parallel blows memory. Per-file serial is still fast because the harness memoizes the patched source in-process.
+
+Every new patch should ship with a `test/patches/<id>.test.ts` file. Start from one of the existing files in the same bucket as your patch (STATIC = grep, EXTRACT = vm eval, etc.) and mirror the anchor-and-differential pattern. See `test/harness/index.ts` for the public API.
 
 ## Branch naming
 
