@@ -22,7 +22,10 @@ import type { Patch } from '../types.js';
 // Must match AGENT_COLORS in cc-source/src/tools/AgentTool/agentColorManager.ts.
 // Hardcoded here so we don't have to chase a second minified identifier at
 // patch time. If Anthropic ever grows this list, update it here too.
-const AGENT_COLORS = [
+//
+// Exported so auto-rename-first-message can reuse the same pool when
+// both patches are enabled — keeps the source of truth in one place.
+export const AGENT_COLORS = [
   'red',
   'blue',
   'green',

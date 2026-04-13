@@ -65,9 +65,29 @@
  *     persistence code at the very top of the arrow's body. The
  *     original body still runs afterward, so setHaikuTitle and the
  *     retry-flag bookkeeping are unchanged.
+ *
+ * Cross-patch coupling with rename-random-color:
+ *
+ *   The standalone `rename-random-color` patch rerolls the prompt-bar
+ *   color only when the user runs `/rename` manually. A user who has
+ *   both patches enabled reasonably expects the SAME thing to happen
+ *   on the auto-rename path: every auto-rename also picks a new random
+ *   color. We honor that here by detecting rename-random-color in
+ *   `ctx.enabledPatches` and, if present:
+ *
+ *     1. Discovering `saveAgentColor` (from the `/color` command) and
+ *        injecting a fire-and-forget persistence call next to
+ *        saveCustomTitle / saveAgentName.
+ *
+ *     2. Discovering the zustand `store` in the enclosing REPL callback
+ *        (via `<ident>.setState(fn)` calls in the same scope) and
+ *        injecting a `store.setState(...)` call to update React state
+ *        for immediate prompt-bar color change. Without this, the
+ *        color would only appear on the next session restore.
  */
 
 import type { Patch } from '../types.js';
+import { AGENT_COLORS } from './rename-random-color.js';
 
 const patch: Patch = {
   id: 'auto-rename-first-message',
@@ -227,7 +247,76 @@ const patch: Patch = {
       'Expected .then callback to have exactly one Identifier param');
     const titleParam = arrow.params[0].name;
 
-    // ── 5. Inject persistence at the top of the arrow body ────────
+    // ── 5. Optionally discover saveAgentColor + the zustand store ──
+    // Only needed when rename-random-color is also enabled — then we
+    // want the auto-rename path to reroll the prompt-bar color the
+    // same way /rename does.
+    //
+    // Two things we need:
+    //
+    //   a) `saveAgentColor` — reached through the `/color` command
+    //      function, which has a unique teammate-block string and calls
+    //      `await saveAgentColor(sessionId, value, path)` twice (reset
+    //      + set). Both calls share one minified callee identifier.
+    //
+    //   b) The zustand `store` local in the REPL component, so we can
+    //      call `store.setState(...)` to update the React state for
+    //      immediate prompt-bar color change. Without this, the color
+    //      only appears on the next session restore. We discover it by
+    //      finding `<ident>.setState(<arrow>)` in the enclosing
+    //      function of the auto-title IfStatement — the `.then`
+    //      callback's closure captures it.
+    const wantColor = ctx.enabledPatches?.has('rename-random-color') === true;
+    let saveAgentColorName: string | null = null;
+    let storeName: string | null = null;
+    if (wantColor) {
+      // ── 5a. Discover saveAgentColor from /color command ──────────
+      const colorMarker = findFirst(ast, (n: any) =>
+        n.type === 'Literal' &&
+        typeof n.value === 'string' &&
+        n.value.startsWith('Cannot set color: This session is a swarm teammate'));
+      assert(colorMarker, 'Could not find color teammate-block string literal');
+      const colorFn = index.enclosingFunction(colorMarker);
+      assert(colorFn, 'Could not find enclosing color call function');
+      const colorAwaited = findAll(colorFn, (n: any) =>
+        n.type === 'AwaitExpression' &&
+        n.argument?.type === 'CallExpression' &&
+        n.argument.callee?.type === 'Identifier' &&
+        n.argument.arguments?.length === 3);
+      assert(colorAwaited.length >= 1,
+        `Expected >=1 three-arg awaited call in /color, got ${colorAwaited.length}`);
+      const names = new Set(colorAwaited.map((a: any) => a.argument.callee.name));
+      assert(names.size === 1,
+        `Expected all 3-arg awaited calls in /color to share one callee, got ${[...names].join(', ')}`);
+      saveAgentColorName = colorAwaited[0].argument.callee.name;
+
+      // ── 5b. Discover the zustand store from the enclosing REPL callback
+      // The auto-title IfStatement sits inside the REPL's `onQueryImpl`
+      // useCallback. That same function calls `<store>.setState(fn)` to
+      // update toolPermissionContext and other AppState fields. We find
+      // the store by matching `<Identifier>.setState(<Function>)` calls
+      // in the enclosing function — the Identifier is the store.
+      const outerFn = index.enclosingFunction(autoTitleIf);
+      assert(outerFn, 'Could not find enclosing function of auto-title IfStatement');
+      const setStateCalls = findAll(outerFn, (n: any) =>
+        n.type === 'CallExpression' &&
+        n.callee?.type === 'MemberExpression' &&
+        n.callee.property?.type === 'Identifier' &&
+        n.callee.property.name === 'setState' &&
+        n.callee.object?.type === 'Identifier' &&
+        n.arguments?.length >= 1 &&
+        (n.arguments[0].type === 'ArrowFunctionExpression' ||
+         n.arguments[0].type === 'FunctionExpression'));
+      assert(setStateCalls.length >= 1,
+        `Expected >=1 store.setState(fn) call in enclosing function, got ${setStateCalls.length}`);
+      // All such calls should reference the same store Identifier.
+      const storeNames = new Set(setStateCalls.map((c: any) => c.callee.object.name));
+      assert(storeNames.size === 1,
+        `Expected all setState calls to reference one store, got ${[...storeNames].join(', ')}`);
+      storeName = setStateCalls[0].callee.object.name;
+    }
+
+    // ── 6. Inject persistence at the top of the arrow body ────────
     // Sequence:
     //   1. bail if the generated title is null/empty
     //   2. kebab-case it: lowercase → non-alnum to hyphens → trim
@@ -236,7 +325,12 @@ const patch: Patch = {
     //   3. fire saveCustomTitle and saveAgentName as fire-and-forget
     //      promises. Both are async; we attach .catch(()=>{}) so an
     //      unhandled rejection from disk errors doesn't crash Node.
-    //   4. the surrounding try/catch covers the getSessionId() call
+    //   4. if rename-random-color is also enabled:
+    //        a. pick a random color from AGENT_COLORS
+    //        b. fire saveAgentColor for persistence
+    //        c. call store.setState to update React state immediately
+    //           (mirrors what /color does after saveAgentColor)
+    //   5. the surrounding try/catch covers the getSessionId() call
     //      and any synchronous throws. A failure here silently falls
     //      through to the original .then body — setHaikuTitle still
     //      runs, so at worst the feature no-ops for this turn.
@@ -244,6 +338,17 @@ const patch: Patch = {
     // The original arrow body (setHaikuTitle + retry-flag logic) is
     // untouched and runs immediately after this preamble.
     const bodyStart = arrow.body.start + 1; // just inside the `{`
+    const colorSnippet = wantColor
+      ? `var __cxAR_P=${JSON.stringify(AGENT_COLORS)};` +
+        `var __cxAR_C=__cxAR_P[Math.floor(Math.random()*__cxAR_P.length)];` +
+        `${saveAgentColorName}(__cxAR_S,__cxAR_C).catch(function(){});` +
+        // Update React state for immediate prompt-bar color change.
+        // The functional updater mirrors /color's setAppState pattern:
+        //   prev => ({...prev, standaloneAgentContext: {...prev.standaloneAgentContext, color: X}})
+        `${storeName}.setState(function(__cxAR_prev){return Object.assign({},__cxAR_prev,` +
+          `{standaloneAgentContext:Object.assign({},__cxAR_prev.standaloneAgentContext,` +
+          `{name:__cxAR_T,color:__cxAR_C})})});`
+      : '';
     const inject =
       `if(${titleParam}){try{` +
         `var __cxAR_T=(${titleParam}+"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");` +
@@ -251,6 +356,7 @@ const patch: Patch = {
           `var __cxAR_S=${getSessionIdName}();` +
           `${saveCustomTitleName}(__cxAR_S,__cxAR_T).catch(function(){});` +
           `${saveAgentNameName}(__cxAR_S,__cxAR_T).catch(function(){});` +
+          colorSnippet +
         `}` +
       `}catch(e){}}`;
     editor.insertAt(bodyStart, inject);
