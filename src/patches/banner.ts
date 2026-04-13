@@ -130,19 +130,6 @@ const patch: Patch = {
         `,${wideReactNs}.createElement(${textComp},{dimColor:!0},"\\nI don\\u0027t ask for money. Just for love!\\nPlease star the repo \\u2B50\\uFE0F https://github.com/magidandrew/cx \\uD83D\\uDC49\\uD83D\\uDC48")`);
     }
 
-    // ── Force boxed layout: disable condensed mode ──
-    // Replace F6(process.env.CLAUDE_CODE_FORCE_FULL_LOGO) with `!0` (true)
-    // so the !F6(...) evaluates to false, preventing the condensed early return.
-    const forceLogoIds = index.allNodes.filter((n: any) =>
-      n.type === 'Identifier' && n.name === 'CLAUDE_CODE_FORCE_FULL_LOGO');
-    for (const id of forceLogoIds) {
-      const memberExpr = index.parentMap.get(id);
-      const callExpr = index.parentMap.get(memberExpr);
-      if (callExpr?.type === 'CallExpression') {
-        editor.replaceRange(callExpr.start, callExpr.end, '!0');
-      }
-    }
-
     // ── Boxed layout: b7("claude",o)("Claude Code") ──
     // Find "Claude Code" literal whose parent CallExpression's callee is another call with "claude"
     let titleCall = null;
