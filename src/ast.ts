@@ -272,6 +272,7 @@ export function buildContext(
   index: ASTIndex,
   editor: PatchEditor,
   version: string,
+  enabledPatches: Set<string> = new Set(),
 ): PatchContext {
   return {
     ast: index.ast,
@@ -279,6 +280,7 @@ export function buildContext(
     editor,
     index,
     version,
+    enabledPatches,
     find: {
       findFirst: (root, pred) => index.findFirst(root, pred),
       findAll: (root, pred) => index.findAll(root, pred),

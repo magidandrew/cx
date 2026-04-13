@@ -75,6 +75,14 @@ export interface PatchContext {
    * that case only catch-all ("*") variants will match.
    */
   version: string;
+  /**
+   * The full set of patch ids being applied to this bundle. Patches
+   * consult it when their behavior depends on another patch also being
+   * enabled (e.g. auto-rename-first-message rerolls a color iff
+   * rename-random-color is on too). Empty when called outside the
+   * orchestrator.
+   */
+  enabledPatches: Set<string>;
   src(node: ASTNode): string;
   assert(condition: unknown, message: string): void;
   getFunctionName(fn: ASTNode): string | null;

@@ -23,7 +23,9 @@ try {
     replaceRange(start: number, end: number, text: string) { edits.push({ pos: start, deleteCount: end - start, text }); },
   };
 
-  const ctx = buildContext(source, index, editor, version);
+  // Single-patch worker: enabledPatches reflects just this one id, so
+  // any cross-patch conditionals resolve to "only this patch is on".
+  const ctx = buildContext(source, index, editor, version, new Set([patchId]));
   const patchModule = await import(`${patchesDir}/${patchId}.js`);
   const patch = patchModule.default as Patch;
   const applyFn = selectPatchApply(patch, version);

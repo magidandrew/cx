@@ -105,8 +105,9 @@ export function transform(
   const ast = acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true }) as unknown as ASTNode;
   const index = new ASTIndex(ast);
   const editor = new SourceEditor();
-  const ctx = buildContext(source, index, editor, version);
   const toApply = resolvePatches(only, exclude);
+  const enabledIds = new Set(toApply.map(p => p.id));
+  const ctx = buildContext(source, index, editor, version, enabledIds);
 
   callbacks.onReady?.();
   for (const patch of toApply) {

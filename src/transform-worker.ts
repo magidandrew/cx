@@ -22,7 +22,7 @@ try {
   parentPort!.postMessage({ type: 'ready' });
 
   const editor = new SourceEditor();
-  const ctx = buildContext(source, index, editor, version);
+  const ctx = buildContext(source, index, editor, version, new Set(patchIds));
 
   for (const id of patchIds) {
     const mod = await import(`${patchesDir}/${id}.js`);
