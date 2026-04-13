@@ -50,13 +50,16 @@ const groups: Group[] = [
     'queue', 'swap-enter-submit', 'cut-to-clipboard', 'reload',
   ]},
   { label: 'Commands', ids: [
-    'delete-sessions', 'cd-command', 'cx-resume-commands',
+    'cd-command', 'cx-resume-commands',
   ]},
   { label: 'Model', ids: [
     'persist-max-effort', 'granular-effort',
   ]},
   { label: 'Quiet mode', ids: [
     'no-feedback', 'no-npm-warning', 'no-attribution', 'disable-telemetry',
+  ]},
+  { label: 'Remote Control', ids: [
+    'remote-control-default-on',
   ]},
   { label: 'Branding', ids: [
     'cx-badge', 'random-clawd',

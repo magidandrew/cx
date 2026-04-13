@@ -7,8 +7,8 @@ Every cx patch is a pure AST transform against the Claude Code bundle. Patches a
 A [GitHub Actions workflow](https://github.com/magidandrew/cx/actions/workflows/test-patches.yml) runs every morning. It fetches the newest `@anthropic-ai/claude-code` from npm and applies every patch against it in isolation — one failure never masks another. If any patch breaks, the run opens or updates a tracking issue in [magidandrew/cx](https://github.com/magidandrew/cx/issues) listing the broken patches. When everything is green again, the issue auto-closes.
 
 **Last verified**
-- `@anthropic-ai/claude-code@2.1.101` — 27/27 patches applied cleanly
-- `@anthropic-ai/claude-code@2.1.96` — 27/27 patches applied cleanly
+- `@anthropic-ai/claude-code@2.1.101` — 29/29 patches applied cleanly
+- `@anthropic-ai/claude-code@2.1.96` — 28/28 patches applied cleanly
 
 ### How to read the Compatible column
 
@@ -23,7 +23,6 @@ If you're running a CC version older than what's listed and a patch throws `no v
 | --- | --- | --- | :---: | --- |
 | `queue` | [Ctrl+Q Message Queue](./queue) | Queue messages with `Ctrl+Q` to run sequentially after the current turn | on | `*` |
 | `cut-to-clipboard` | [Cut prompt to clipboard (Alt+X)](./cut-to-clipboard) | `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input | on | `*` |
-| `delete-sessions` | [Delete Sessions from /resume](./delete-sessions) | `Opt+D` in the resume picker deletes the focused session (confirm by pressing `Opt+D` again) | on | `*` |
 | `reload` | [Ctrl+X Ctrl+R Reload](./reload) | Reload the cx session — re-applies patches and keeps the conversation | on | `*` |
 | `always-show-thinking` | [Always Show Thinking](./always-show-thinking) | Show thinking block content inline instead of collapsed | on | `*` |
 | `session-usage` | [Session Usage](./session-usage) | Always show `"25% session used · 15% context used"` | on | `*` |
@@ -36,6 +35,7 @@ If you're running a CC version older than what's listed and a patch throws `no v
 | `no-tips` | [No Tips](./no-tips) | Hide spinner tips | on | `*` |
 | `no-feedback` | [No Feedback Prompts](./no-feedback) | Remove feedback survey prompts | on | `*` |
 | `no-npm-warning` | [No NPM Warning](./no-npm-warning) | Suppress the "switched from npm to native installer" nag | on | `*` |
+| `no-multi-install-warning` | [No Multi-Install Warning](./no-multi-install-warning) | Suppress "Multiple installations found" nag in update/doctor | on | `*` |
 | `no-attribution` | [No Attribution](./no-attribution) | Strip Claude Code attribution from commits and PRs | on | `*` |
 | `disable-telemetry` | [Disable Telemetry](./disable-telemetry) | Strip Datadog and 1P analytics calls | on | `*` |
 | `random-clawd` | [Random Clawd Color](./random-clawd) | Randomize the Clawd mascot color on each startup | on | `*` |
@@ -45,6 +45,7 @@ If you're running a CC version older than what's listed and a patch throws `no v
 | `auto-rename-first-message` | [Auto /rename on First Message](./auto-rename-first-message) | Persist an auto-generated session title on the first user message so /resume and the terminal tab reflect it without typing /rename | on | `*` |
 | `cd-command` | [/cd Command](./cd-command) | `/cd <path>` — change where bash commands run (same as shell `cd`, keeps project settings) | on | `*` |
 | `banner` | [Attribution Banner](./banner) | Show "@wormcoffee" on the Claude Code title line | on | `*` |
+| `remote-control-default-on` | [Remote Control on by Default](./remote-control-default-on) | Join Remote Control automatically on each new session (explicit config still wins) | off | `*` |
 | `swap-enter-submit` | [Swap Enter / Meta+Enter](./swap-enter-submit) | Enter inserts a newline, Option/Alt+Enter submits | off | `*` |
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
 | `nsfw-spinner` | [NSFW Spinner](./nsfw-spinner) | Replace spinner verbs with NSFW ones (tagged `[nsfw]`, conflicts with `simple-spinner`) | off | `*` |
@@ -70,6 +71,7 @@ Per-version test results from the most recent runs. A `✓` means the patch appl
 | `granular-effort` | ✓ | ✓ |
 | `no-attribution` | ✓ | ✓ |
 | `no-feedback` | ✓ | ✓ |
+| `no-multi-install-warning` |  |  |
 | `no-npm-warning` | ✓ | ✓ |
 | `no-tips` | ✓ | ✓ |
 | `nsfw-spinner` | ✓ | ✓ |
@@ -78,6 +80,7 @@ Per-version test results from the most recent runs. A `✓` means the patch appl
 | `queue` | ✓ | ✓ |
 | `random-clawd` | ✓ | ✓ |
 | `reload` | ✓ | ✓ |
+| `remote-control-default-on` |  | ✓ |
 | `rename-random-color` | ✓ | ✓ |
 | `session-usage` | ✓ | ✓ |
 | `show-file-in-collapsed-read` | ✓ | ✓ |
