@@ -26,6 +26,16 @@ npm run build   # tsc → dist/
 
 Do not run dist files during development — use bun on src/ instead.
 
+## Releasing
+
+**Never `npm publish` locally.** Releases are triggered by publishing a GitHub Release; `.github/workflows/publish.yml` runs on `release: published`, sets the package version from the tag (`v<X.Y.Z>` → `<X.Y.Z>`), builds, and publishes to npm with provenance.
+
+To cut a release:
+
+1. Bump `package.json` version and commit on `main`.
+2. Push the commit.
+3. `gh release create vX.Y.Z --title vX.Y.Z --notes "..."` — the workflow takes it from there.
+
 ## Project structure
 
 - `src/patches/` — individual patch modules, one per file
