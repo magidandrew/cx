@@ -47,36 +47,63 @@ describe('granular-effort — cycleEffortLevel', () => {
     );
   }
 
-  test('cycles numbers 1..9 rightward', () => {
+  // ── max-supporting models (Opus 4.6): 1..9 ─────────────────────────
+  test('cycles numbers 1..9 rightward when allowMax', () => {
     const cycle = getCycle();
-    expect(cycle(1, 'right')).toBe(2);
-    expect(cycle(5, 'right')).toBe(6);
-    expect(cycle(8, 'right')).toBe(9);
+    expect(cycle(1, 'right', true)).toBe(2);
+    expect(cycle(5, 'right', true)).toBe(6);
+    expect(cycle(8, 'right', true)).toBe(9);
   });
 
-  test('wraps 9 → 1 on right', () => {
+  test('wraps 9 → 1 on right when allowMax', () => {
     const cycle = getCycle();
-    expect(cycle(9, 'right')).toBe(1);
+    expect(cycle(9, 'right', true)).toBe(1);
   });
 
-  test('wraps 1 → 9 on left', () => {
+  test('wraps 1 → 9 on left when allowMax', () => {
     const cycle = getCycle();
-    expect(cycle(1, 'left')).toBe(9);
+    expect(cycle(1, 'left', true)).toBe(9);
   });
 
-  test('cycles leftward', () => {
+  test('cycles leftward when allowMax', () => {
     const cycle = getCycle();
-    expect(cycle(5, 'left')).toBe(4);
-    expect(cycle(9, 'left')).toBe(8);
+    expect(cycle(5, 'left', true)).toBe(4);
+    expect(cycle(9, 'left', true)).toBe(8);
   });
 
-  test('maps legacy string effort levels to numbers before cycling', () => {
+  test('maps legacy string effort levels to numbers before cycling (allowMax)', () => {
     const cycle = getCycle();
     // Prelude maps: low→2, medium→5, max→9, default→7 (high)
-    expect(cycle('low', 'right')).toBe(3);
-    expect(cycle('medium', 'right')).toBe(6);
-    expect(cycle('high', 'right')).toBe(8);
-    expect(cycle('max', 'right')).toBe(1); // 9 → wrap
+    expect(cycle('low', 'right', true)).toBe(3);
+    expect(cycle('medium', 'right', true)).toBe(6);
+    expect(cycle('high', 'right', true)).toBe(8);
+    expect(cycle('max', 'right', true)).toBe(1); // 9 → wrap
+  });
+
+  // ── non-max models (Sonnet 4.6, etc.): 1..7 ────────────────────────
+  test('caps at 7 when !allowMax — wraps 7 → 1 on right', () => {
+    const cycle = getCycle();
+    expect(cycle(6, 'right', false)).toBe(7);
+    expect(cycle(7, 'right', false)).toBe(1);
+  });
+
+  test('clamps stale > 7 input down to 7 when !allowMax', () => {
+    const cycle = getCycle();
+    // A 9 carried over from Opus shouldn't render as "9/7" on Sonnet —
+    // clamp first, then cycle as if the user is at the cap.
+    expect(cycle(9, 'right', false)).toBe(1); // 9 → 7 → wrap to 1
+    expect(cycle(8, 'left', false)).toBe(6);  // 8 → 7 → -1 = 6
+  });
+
+  test('wraps 1 → 7 on left when !allowMax', () => {
+    const cycle = getCycle();
+    expect(cycle(1, 'left', false)).toBe(7);
+  });
+
+  test('"max" string clamped to 7 when !allowMax', () => {
+    const cycle = getCycle();
+    // "max" → 9 → clamp to 7 → wrap to 1
+    expect(cycle('max', 'right', false)).toBe(1);
   });
 });
 
@@ -158,15 +185,29 @@ describe('granular-effort — API effort number→string map', () => {
   });
 });
 
-describe('granular-effort — N/9 display', () => {
-  test('patched bundle contains a "/9" display suffix literal', () => {
-    // The ModelPicker text now reads `N,"/9"` instead of La(e),
-    // " effort". The literal "/9" is unique enough to search.
-    expect(hasLiteral(patched, '/9')).toBe(true);
+describe('granular-effort — N/M display', () => {
+  test('ModelPicker display denominator switches between 9 and 7', () => {
+    // Section 2 emits `Math.min(N, X?9:7), "/", X?9:7` where X is
+    // focusedSupportsMax. We don't have the bundled name for X, but the
+    // pair `?9:7)` should appear at least twice (once for the cap, once
+    // for the denominator string).
+    const matches = patched.match(/\?9:7\)/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('patched bundle contains the " with ..." / 9 effort template', () => {
-    // The effortSuffix template is rebuilt with a slash-9 tail.
-    expect(patched.includes('/9 effort')).toBe(true);
+  test('ModelPicker display uses Math.min to clamp numerator to model cap', () => {
+    // Catches accidental removal of the per-model clamp — without it,
+    // a stale 9 from Opus would render as "9/7" on Sonnet.
+    expect(patched.includes('Math.min(')).toBe(true);
+  });
+
+  test('startup banner suffix is gated on model (haiku/opus-4-6 branches)', () => {
+    // Section 7's IIFE: distinguishes haiku (no suffix), opus-4-6 (/9),
+    // and everything else (/7). All three branches must be present in
+    // the patched bundle.
+    expect(patched.includes('/haiku/i.test(')).toBe(true);
+    expect(patched.includes('/opus-4-6/i.test(')).toBe(true);
+    // Tail: "/"+_M+" effort"
+    expect(patched.includes('"/"+_M+" effort"')).toBe(true);
   });
 });

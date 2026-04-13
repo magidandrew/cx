@@ -2,20 +2,28 @@
  * Granular Effort Slider Patch
  *
  * Replaces the discrete low/medium/high/max effort picker in `/model` with
- * a 1-9 numeric slider. Users cycle 1→9 with ← →, the value persists across
- * sessions as the exact integer chosen (not the mapped canonical level),
- * and the downstream API call receives a conventional low/medium/high/max
- * string derived from the chosen number at the boundary.
+ * a numeric slider. Users cycle the value with ← →, the integer persists
+ * across sessions as-is (not the mapped canonical level), and the API call
+ * receives a conventional low/medium/high/max string derived at the
+ * request boundary.
  *
- * Scale (1 = minimal, 5 = default, 9 = maximum):
+ * Per-model range mirrors what the model actually supports:
+ *   - Opus 4.6   → 1..9 (low/medium/high/max)
+ *   - Sonnet 4.6 → 1..7 (low/medium/high — no max)
+ *   - Haiku      → no slider, no banner suffix (effort param is unsupported)
+ *
+ * Scale (1 = minimal, 5 = default, max = 7 or 9):
  *   1-2 → low
  *   3-5 → medium
  *   6-7 → high
- *   8-9 → max
+ *   8-9 → max (only sent when the model supports it)
  *
  * Patch sites:
- *   1. cycleEffortLevel — numeric 1..9 cycle via early-return prelude.
- *   2. ModelPicker display — "<capitalize(e)> effort" → " N/9".
+ *   1. cycleEffortLevel — numeric cycle via early-return prelude. Honors
+ *      the function's third arg (includeMax) so non-max models top out at 7.
+ *   2. ModelPicker display — "<capitalize(e)> effort" → " N/M" where M is
+ *      9 for max-supporting models and 7 otherwise (read from the same
+ *      focusedSupportsMax variable the picker already computes).
  *   3. convertEffortValueToLevel — pass numbers through unchanged so the
  *      picker re-initializes to the same integer the user picked.
  *   4. toPersistableEffort — allow numbers to flow to settings.
@@ -23,8 +31,8 @@
  *      a union with int.
  *   6. API-layer effort assignment — map number → string right before the
  *      request body is built.
- *   7. getEffortSuffix template — startup banner says "with N/9 effort"
- *      instead of "with high effort".
+ *   7. getEffortSuffix template — startup banner says "with N/M effort",
+ *      gated on model: omitted for haiku, /9 for opus-4-6, /7 otherwise.
  *
  * Works alongside persist-max-effort (which already appends "max" to the
  * effort enums). All edits are zero-width insertions so they compose
@@ -78,13 +86,20 @@ const patch: Patch = {
     });
     assert(cycleFn, 'Could not find cycleEffortLevel function');
 
-    const [pV, pDir] = cycleFn.params.map((p: any) => p.name);
+    const [pV, pDir, pAllowMax] = cycleFn.params.map((p: any) => p.name);
 
+    // The third arg (includeMax) is the picker's focusedSupportsMax bool.
+    // When the model doesn't support max, top out at 7 ("high") so the
+    // slider mirrors the original low/medium/high range. Also clamp the
+    // current value down to the cap when switching models — otherwise a
+    // 9 carried over from Opus would render as "9/7" on Sonnet.
     const cyclePrelude =
+      `var _cxMax=${pAllowMax}?9:7;` +
       `var _cxY=typeof ${pV}==="number"?${pV}:` +
       `(${pV}==="low"?2:${pV}==="medium"?5:${pV}==="max"?9:7);` +
-      `if(${pDir}==="right")return _cxY>=9?1:_cxY+1;` +
-      `return _cxY<=1?9:_cxY-1;`;
+      `if(_cxY>_cxMax)_cxY=_cxMax;` +
+      `if(${pDir}==="right")return _cxY>=_cxMax?1:_cxY+1;` +
+      `return _cxY<=1?_cxMax:_cxY-1;`;
     editor.insertAt(cycleFn.body.start + 1, cyclePrelude);
 
     // ── 2. ModelPicker display text ──────────────────────────────────
@@ -96,10 +111,14 @@ const patch: Patch = {
     // CallExpression, then swap
     //   [ La(e), " effort", e===l ? " (default)" : "" ]
     // for
-    //   [ (typeof e==="number"?e:({low:2,medium:5,high:7,max:9})[e]||5), "/9" ]
+    //   [ Math.min(N, M), "/", M ]
+    // where N is the numeric form of the displayEffort and M is the per-model
+    // cap (9 if focusedSupportsMax, else 7). The "(default)" marker is
+    // dropped because the numeric display makes the current value explicit.
     //
-    // The "(default)" marker is dropped because the numeric display makes
-    // the current value explicit enough.
+    // To find the focusedSupportsMax variable name in the bundle, locate
+    // the displayEffort clamp ConditionalExpression that the picker writes
+    // as `T==="max" && !X ? "high" : T` — `X` is focusedSupportsMax.
     const effortLit = findFirst(ast, (n: any) =>
       n.type === 'Literal' && n.value === ' effort');
     assert(effortLit, 'Could not find " effort" literal');
@@ -129,10 +148,36 @@ const patch: Patch = {
       n.type === 'Literal' && n.value === ' (default)');
     assert(defaultLit, 'Default-marker conditional did not contain " (default)"');
 
+    // Find `T==="max" && !X ? "high" : T` — extract X (focusedSupportsMax).
+    const dispEffortClamp = findFirst(ast, (n: any) => {
+      if (n.type !== 'ConditionalExpression') return false;
+      if (n.consequent?.type !== 'Literal' || n.consequent.value !== 'high') return false;
+      if (n.alternate?.type !== 'Identifier') return false;
+      const t = n.test;
+      if (t?.type !== 'LogicalExpression' || t.operator !== '&&') return false;
+      const l = t.left, r = t.right;
+      if (
+        l?.type !== 'BinaryExpression' || l.operator !== '===' ||
+        l.left?.type !== 'Identifier' ||
+        l.right?.type !== 'Literal' || l.right.value !== 'max'
+      ) return false;
+      if (
+        r?.type !== 'UnaryExpression' || r.operator !== '!' ||
+        r.argument?.type !== 'Identifier'
+      ) return false;
+      return l.left.name === n.alternate.name;
+    });
+    assert(dispEffortClamp, 'Could not find displayEffort `T==="max"&&!X?"high":T` clamp');
+    const supportsMaxVar = dispEffortClamp.test.right.argument.name;
+
     const numExpr =
       `(typeof ${eCode}==="number"?${eCode}:` +
       `({low:2,medium:5,high:7,max:9})[${eCode}]||5)`;
-    editor.replaceRange(laCall.start, defaultCond.end, `${numExpr},"/9"`);
+    const capExpr = `(${supportsMaxVar}?9:7)`;
+    editor.replaceRange(
+      laCall.start, defaultCond.end,
+      `Math.min(${numExpr},${capExpr}),"/",${capExpr}`,
+    );
 
     // ── 3. convertEffortValueToLevel: preserve numbers ───────────────
     //
@@ -315,7 +360,7 @@ const patch: Patch = {
         `${apiParam}=${apiParam}<=2?"low":${apiParam}<=5?"medium":${apiParam}<=7?"high":"max";`,
     );
 
-    // ── 7. getEffortSuffix: render "N/9 effort" in the startup banner ──
+    // ── 7. getEffortSuffix: render "N/M effort" in the startup banner ──
     //
     // Source (bundle):
     //   function IV6(q,K){
@@ -327,8 +372,15 @@ const patch: Patch = {
     //
     // Rewrite the template literal so the banner reads
     //   "Opus 4.6 (1M context) with 4/9 effort · Claude Max"
-    // instead of
-    //   "Opus 4.6 (1M context) with medium effort · Claude Max".
+    //   "Sonnet 4.6 with 5/7 effort · Claude Max"          (no max)
+    //   "Haiku 4.5 · Claude Max"                            (no effort)
+    // instead of the stock "with medium effort" wording.
+    //
+    // Gating uses the enclosing function's model param. The mirroring of
+    // modelSupportsEffort/modelSupportsMaxEffort here is intentionally
+    // conservative — we only know the public Claude family, and any
+    // unfamiliar model string falls through to the /9 branch (matching
+    // stock CC's "default to true on 1P" behavior).
     //
     // Match: a TemplateLiteral whose quasis are exactly [" with ", " effort"]
     // and whose single expression is a call to convertFn (Rw6). There is
@@ -353,12 +405,27 @@ const patch: Patch = {
     });
     assert(suffixTmpl, 'Could not find getEffortSuffix template literal');
 
+    const suffixFn = ctx.index.enclosingFunction(suffixTmpl);
+    assert(
+      suffixFn && suffixFn.params.length >= 1,
+      'getEffortSuffix enclosing function missing expected model param',
+    );
+    const modelParam = suffixFn.params[0].name;
+
     // The expression argument is `_` (the resolveAppliedEffort result).
     // Reuse it directly so the replacement stays in scope.
     const suffixInner = src(suffixTmpl.expressions[0].arguments[0]);
+    // IIFE: model + suffixInner → "" | " with N/M effort". Inline because
+    // the original site is a single expression returning a string.
     const newSuffixTmpl =
-      '` with ${(typeof ' + suffixInner + '==="number"?' + suffixInner +
-      ':({low:2,medium:5,high:7,max:9})[' + suffixInner + ']||5)}/9 effort`';
+      '(function(_m,_v){' +
+        'if(/haiku/i.test(_m))return"";' +
+        'var _n=typeof _v==="number"?_v:' +
+          '({low:2,medium:5,high:7,max:9})[_v]||5;' +
+        'var _M=/opus-4-6/i.test(_m)?9:7;' +
+        'if(_n>_M)_n=_M;' +
+        'return" with "+_n+"/"+_M+" effort";' +
+      '})(' + modelParam + ',' + suffixInner + ')';
     editor.replaceRange(suffixTmpl.start, suffixTmpl.end, newSuffixTmpl);
   },
 };
