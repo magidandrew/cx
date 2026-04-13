@@ -57,6 +57,15 @@ try {
     process.exit(0);
   }
 
+  // Auto-update path: the running `cx` spawned `npm install -g` and
+  // is driving its own spinner + "✔ cx updated to X.Y.Z" line. The
+  // banner would bleed through that (we write to /dev/tty directly,
+  // bypassing npm's stdio capture) so stay silent when the parent
+  // sets CX_AUTO_UPDATING=1.
+  if (process.env.CX_AUTO_UPDATING === '1') {
+    process.exit(0);
+  }
+
   // ANSI helpers. NO_COLOR opts out (standard env var); otherwise we
   // emit escapes unconditionally since modern terminals and CI log
   // viewers both render them fine.
