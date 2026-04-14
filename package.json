@@ -1,6 +1,6 @@
 {
   "name": "claude-code-extensions",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Modular, opt-in patches for @anthropic-ai/claude-code applied at runtime via AST transformation",
   "type": "module",
   "bin": {
