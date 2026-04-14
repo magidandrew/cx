@@ -328,9 +328,29 @@ const patch: Patch = {
     // confirmation Box copies `onKeyDown` from the discovered key
     // handler variable so keys still reach the handler — without this,
     // the second Opt+D (and every cancel keystroke) drops on the floor.
-    const origReturnSrc = src(lastReturn.argument);
+    //
+    // The Opt+D shortcut hint (see § 10b) lives INSIDE this return
+    // expression, so we can't do a separate editor.insertAt for it —
+    // the replaceRange below would overwrite the inserted bytes.
+    // Instead, we splice the hint into the original argument source
+    // at the ctrl+r hint's byte offset and bake it into the replacement.
+    // Ink's bundled keydown plumbing delivers keys by bubbling from a
+    // focused element — not by attaching `onKeyDown` to any Box. The
+    // main picker works because the inner TreeSelect/FlatOptionsSelect
+    // has focus and its keystrokes bubble up to LogSelector's root
+    // Box. Our confirmation overlay has no focusable children, so
+    // WITHOUT `tabIndex: 0` + `autoFocus: true` on the overlay Box,
+    // no element in the tree has focus and keydown events never fire.
+    // User-visible symptom: the first Opt+D renders the overlay, but
+    // neither the second Opt+D nor any cancel key reaches the handler.
+    // `key: "cx-del-confirm"` forces React to treat this as a new
+    // element rather than an in-place prop update of the main return
+    // Box. `autoFocus: true` only fires on mount, and without the key
+    // bump React reuses the outer Box (same type, same position in
+    // the conditional) on the normal → confirm transition, so focus
+    // is never grabbed and keys are never delivered.
     const confirmExpr =
-      `${reactNs}.createElement(${boxVar},{flexDirection:"column",paddingLeft:2,paddingTop:1,onKeyDown:${keyHandlerVar}},` +
+      `${reactNs}.createElement(${boxVar},{key:"cx-del-confirm",flexDirection:"column",paddingLeft:2,paddingTop:1,tabIndex:0,autoFocus:true,onKeyDown:${keyHandlerVar}},` +
         `${reactNs}.createElement(${textVar},{bold:true,color:"red"},"Delete this session?"),` +
         `${reactNs}.createElement(${textVar},{dimColor:true},String(__cxDP)),` +
         `${reactNs}.createElement(${boxVar},{paddingTop:1},` +
@@ -339,10 +359,8 @@ const patch: Patch = {
           `${reactNs}.createElement(${textVar},null," again to confirm, any other key to cancel")` +
         `)` +
       `)`;
-    editor.replaceRange(lastReturn.argument.start, lastReturn.argument.end,
-      `(__cxDP?(${confirmExpr}):(${origReturnSrc}))`);
 
-    // ── 10b. Insert an Opt+D hint into the keyboard shortcut row ─────
+    // ── 10b. Opt+D shortcut hint, injected into the row in-place ─────
     // Placed immediately after the existing Ctrl+R rename hint so the
     // row reads "...Ctrl+V Preview · Ctrl+R Rename · Opt+D Delete · ..."
     // The `"opt+d"` chord is normalized by the bundle's chord parser
@@ -351,7 +369,17 @@ const patch: Patch = {
     const optDHint =
       `,${reactNs}.createElement(${shortcutHintVar},` +
       `{chord:"opt+d",action:"delete",format:{modCase:"title",charCase:"upper"}})`;
-    editor.insertAt(ctrlRHint.end, optDHint);
+
+    const origReturnSrc = src(lastReturn.argument);
+    const hintOffsetInReturn = ctrlRHint.end - lastReturn.argument.start;
+    assert(hintOffsetInReturn >= 0 && hintOffsetInReturn <= origReturnSrc.length,
+      'Ctrl+R hint is not inside LogSelector final return — anchor mismatch');
+    const augmentedReturnSrc =
+      origReturnSrc.slice(0, hintOffsetInReturn) + optDHint +
+      origReturnSrc.slice(hintOffsetInReturn);
+
+    editor.replaceRange(lastReturn.argument.start, lastReturn.argument.end,
+      `(__cxDP?(${confirmExpr}):(${augmentedReturnSrc}))`);
 
     // ── 11. Always pass onLogsChanged from ResumeConversation ────────
     // The original code passes `isCustomTitleEnabled() ? () => loadLogs(...) : undefined`.
