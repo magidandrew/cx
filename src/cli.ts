@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 import { transformAsync, listPatches, resolveConflicts } from './transform.js';
 import { runVersionCheck } from './version-check.js';
 import { CONFIG_PATH } from './config-path.js';
+import { detectTerminalBgColorFgBg } from './term-bg.js';
 import type { CxConfig, PatchInfo } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -345,6 +346,23 @@ await runVersionCheck();
 
 const userArgs = process.argv.slice(2);
 let isReload = false;
+
+// ── OSC 11 background probe ───────────────────────────────────────────────
+// Auto-theme's OSC 11 watcher is stripped from the public bundle, so
+// on terminals that don't export COLORFGBG (Ghostty, Terminal.app,
+// Alacritty, ...) `auto` silently resolves to dark. We query the bg
+// out-of-band via /dev/tty and hand the result to the child as
+// COLORFGBG — the bundled `detectFromColorFgBg()` picks it up just
+// like iTerm2's. Using /dev/tty (not process.stdin) keeps the
+// inherited stdin fd free of Node-stream buffering artefacts that
+// would otherwise cause input lag in Claude's chat.
+function seedColorFgBg(enabled: Set<string>): void {
+  if (!enabled.has('auto-detect-theme')) return;
+  if (process.env.COLORFGBG) return;
+  const value = detectTerminalBgColorFgBg();
+  if (value) process.env.COLORFGBG = value;
+}
+seedColorFgBg(new Set(getEnabledPatches()));
 
 while (true) {
   await ensureCache();

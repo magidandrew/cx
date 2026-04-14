@@ -27,3 +27,4 @@ export { default as renameRandomColor } from './rename-random-color.js';
 export { default as autoRenameFirstMessage } from './auto-rename-first-message.js';
 export { default as remoteControlDefaultOn } from './remote-control-default-on.js';
 export { default as noMultiInstallWarning } from './no-multi-install-warning.js';
+export { default as autoDetectTheme } from './auto-detect-theme.js';

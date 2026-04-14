@@ -69,6 +69,7 @@ export default defineConfig({
               { text: 'Auto /rename on First Message', link: '/patches/auto-rename-first-message' },
               { text: '/cd Command', link: '/patches/cd-command' },
               { text: 'Attribution Banner', link: '/patches/banner' },
+              { text: 'Auto-Detect Terminal Theme', link: '/patches/auto-detect-theme' },
               { text: 'Swap Enter / Meta+Enter', link: '/patches/swap-enter-submit' },
               { text: 'Cut prompt to clipboard', link: '/patches/cut-to-clipboard' },
               { text: 'Simple Spinner', link: '/patches/simple-spinner' },

@@ -45,6 +45,7 @@ If you're running a CC version older than what's listed and a patch throws `no v
 | `auto-rename-first-message` | [Auto /rename on First Message](./auto-rename-first-message) | Persist an auto-generated session title on the first user message so /resume and the terminal tab reflect it without typing /rename | on | `*` |
 | `cd-command` | [/cd Command](./cd-command) | `/cd <path>` — change where bash commands run (same as shell `cd`, keeps project settings) | on | `*` |
 | `banner` | [Attribution Banner](./banner) | Show "@wormcoffee" on the Claude Code title line | on | `*` |
+| `auto-detect-theme` | [Auto-Detect Terminal Theme](./auto-detect-theme) | Default theme to `auto` so it matches your terminal background on first run | on | `*` |
 | `remote-control-default-on` | [Remote Control on by Default](./remote-control-default-on) | Join Remote Control automatically on each new session (explicit config still wins) | off | `*` |
 | `swap-enter-submit` | [Swap Enter / Meta+Enter](./swap-enter-submit) | Enter inserts a newline, Option/Alt+Enter submits | off | `*` |
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
@@ -59,6 +60,7 @@ Per-version test results from the most recent runs. A `✓` means the patch appl
 | --- | :---: | :---: |
 | `always-show-thinking` | ✓ | ✓ |
 | `anthropic-status-banner` | ✓ | ✓ |
+| `auto-detect-theme` |  | ✓ |
 | `auto-rename-first-message` | ✓ | ✓ |
 | `banner` | ✓ | ✓ |
 | `cd-command` | ✓ | ✓ |
