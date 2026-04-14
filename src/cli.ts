@@ -70,7 +70,11 @@ try {
 } catch { /* fallthrough */ }
 
 if (!cliPath || !existsSync(cliPath)) {
-  console.error('cx: could not find @anthropic-ai/claude-code. Install it:');
+  console.error('cx: could not find @anthropic-ai/claude-code in the npm global root.');
+  console.error('cx patches the JavaScript bundle at runtime, so the npm install is');
+  console.error("required — other distributions ship a compiled binary that can't");
+  console.error('be patched.');
+  console.error('');
   console.error('  npm install -g @anthropic-ai/claude-code');
   process.exit(1);
 }

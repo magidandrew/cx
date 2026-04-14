@@ -104,8 +104,10 @@ try {
     lines.push(`  ${bold(green('▶'))} ${bold('Run')} ${bold(cyan('cx'))} ${bold('to get started')}`);
     lines.push(`    ${dim('opens a one-time setup, then launches Claude Code')}`);
   } else {
-    lines.push(`  ${yellow('⚠')}  ${bold('@anthropic-ai/claude-code is not installed globally')}`);
-    lines.push(`    ${dim('cx patches it at runtime — install it first, then run cx:')}`);
+    lines.push(`  ${yellow('⚠')}  ${bold('@anthropic-ai/claude-code is not installed via npm')}`);
+    lines.push(`    ${dim('cx patches the JavaScript bundle at runtime, so the npm')}`);
+    lines.push(`    ${dim("install is required — other distributions ship a compiled")}`);
+    lines.push(`    ${dim("binary that can't be patched.")}`);
     lines.push('');
     lines.push(`    ${dim('$')} ${cyan('npm install -g @anthropic-ai/claude-code')}`);
     lines.push(`    ${dim('$')} ${cyan('cx')}`);
