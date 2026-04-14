@@ -58,56 +58,105 @@ const patch: Patch = {
 
     // ── Patch 2: handleEnter() in useTextInput ───────────────────────
     //
-    // Original handleEnter:
-    //   if (backslash) → backslash+newline (keep)
-    //   if (key.meta || key.shift) → cursor.insert('\n')
-    //   if (Apple_Terminal && shift) → cursor.insert('\n')
-    //   onSubmit?.(originalValue)
+    // Two bundle shapes to handle:
     //
-    // After patch:
+    //   OLD shape (≤2.1.101): handleEnter(input, key) with `key.meta` /
+    //   `key.shift` as MemberExpressions, and onSubmit called as the
+    //   LAST statement (e.g. `onSubmit?.(originalValue)`).
+    //
+    //     if (backslash) → backslash+newline
+    //     if (key.meta || key.shift) → cursor.insert('\n')
+    //     if (Apple_Terminal && shift) → cursor.insert('\n')
+    //     onSubmit?.(originalValue)
+    //
+    //   NEW shape (≥2.1.105): params destructured as `{meta:A, shift:B}`,
+    //   and onSubmit is invoked inside an earlier `if (onSubmit) …`
+    //   statement, followed by `return cursor` as the last statement.
+    //
+    //     function handleEnter({meta:A, shift:B}) {
+    //       if (backslash) return …;
+    //       if (A || B) return cursor.insert('\n');
+    //       if (terminal === 'Apple_Terminal' && …) return cursor.insert('\n');
+    //       if (onSubmit) onSubmit(cursor.text), submitted = !0;
+    //       return cursor;
+    //     }
+    //
+    // After patch (both shapes):
     //   if (backslash) → backslash+newline (unchanged)
-    //   if (key.meta) → onSubmit (Meta/Option+Enter submits)
-    //   if (key.shift) → cursor.insert('\n') (Shift+Enter still inserts newline)
-    //   (Apple_Terminal block removed — not needed; Meta works via Option key,
-    //    and plain Enter newlines go through keybinding system)
-    //   return cursor (plain Enter = no-op; keybinding system handles
-    //                  Enter → chat:newline → handleNewline in PromptInput)
+    //   if (meta) → run the onSubmit side effect, then return cursor
+    //   if (shift) → cursor.insert('\n')
+    //   (Apple_Terminal block removed — Meta works natively via Option)
+    //   (plain Enter = no-op; keybinding system routes Enter → chat:newline)
 
-    // Find handleEnter by stable markers. Take the SMALLEST matching
-    // function (handleEnter is nested inside useTextInput).
+    // Find handleEnter. Accept EITHER shape: the unifying markers are
+    // Apple_Terminal literal and .backspace() call; the third marker
+    // can be either `X.meta || X.shift` (old) or a destructured
+    // `{meta:_, shift:_}` first param (new).
+    const isDestructuredMetaShift = (node: any) => {
+      const p = node.params?.[0];
+      if (p?.type !== 'ObjectPattern') return false;
+      const has = (name: string) => p.properties?.some((pp: any) =>
+        pp.type === 'Property' && pp.key?.type === 'Identifier' && pp.key.name === name &&
+        pp.value?.type === 'Identifier');
+      return has('meta') && has('shift');
+    };
+    const isMemberMetaOrShift = (node: any) =>
+      findFirst(node, (n: any) =>
+        n.type === 'LogicalExpression' && n.operator === '||' &&
+        n.left.type === 'MemberExpression' && n.left.property?.name === 'meta' &&
+        n.right.type === 'MemberExpression' && n.right.property?.name === 'shift') !== null;
+
     const isHandleEnterCandidate = (node: any) => {
       if (node.type !== 'FunctionDeclaration' && node.type !== 'FunctionExpression') return false;
       if (!findFirst(node, (n: any) => n.type === 'Literal' && n.value === 'Apple_Terminal')) return false;
       if (!findFirst(node, (n: any) =>
-        n.type === 'CallExpression' && n.callee.type === 'MemberExpression' &&
-        n.callee.property.name === 'backspace')) return false;
-      return findFirst(node, (n: any) =>
-        n.type === 'LogicalExpression' && n.operator === '||' &&
-        n.left.type === 'MemberExpression' && n.left.property.name === 'meta' &&
-        n.right.type === 'MemberExpression' && n.right.property.name === 'shift') !== null;
+        n.type === 'CallExpression' && n.callee?.type === 'MemberExpression' &&
+        n.callee.property?.name === 'backspace')) return false;
+      return isDestructuredMetaShift(node) || isMemberMetaOrShift(node);
     };
     const candidates = findAll(ast, isHandleEnterCandidate);
     assert(candidates.length >= 1, 'Could not find handleEnter function');
     candidates.sort((a: any, b: any) => (a.end - a.start) - (b.end - b.start));
     const handleEnterFn = candidates[0];
+    const isNewShape = isDestructuredMetaShift(handleEnterFn);
 
-    // Discover minified variable names
+    // Discover the meta/shift references: either MemberExpression names
+    // (old shape) or destructured parameter names (new shape).
+    let metaTestSrc: string;   // e.g. "K.meta" or "Z6"
+    let shiftTestSrc: string;  // e.g. "K.shift" or "E6"
+    let metaShiftIf: any;
 
-    // key variable: from key.meta || key.shift
-    const metaOrShift = findFirst(handleEnterFn, (n: any) =>
-      n.type === 'LogicalExpression' && n.operator === '||' &&
-      n.left.type === 'MemberExpression' && n.left.property.name === 'meta' &&
-      n.right.type === 'MemberExpression' && n.right.property.name === 'shift');
-    const keyVar = src(metaOrShift.left.object);
-
-    // if-statement that tests meta||shift
-    const metaShiftIf = findFirst(handleEnterFn, (n: any) => {
-      if (n.type !== 'IfStatement') return false;
-      const t = n.test;
-      return t.type === 'LogicalExpression' && t.operator === '||' &&
-        t.left.type === 'MemberExpression' && t.left.property.name === 'meta' &&
-        t.right.type === 'MemberExpression' && t.right.property.name === 'shift';
-    });
+    if (isNewShape) {
+      const p = handleEnterFn.params[0];
+      const metaProp = p.properties.find((pp: any) =>
+        pp.type === 'Property' && pp.key?.type === 'Identifier' && pp.key.name === 'meta');
+      const shiftProp = p.properties.find((pp: any) =>
+        pp.type === 'Property' && pp.key?.type === 'Identifier' && pp.key.name === 'shift');
+      metaTestSrc = metaProp.value.name;
+      shiftTestSrc = shiftProp.value.name;
+      metaShiftIf = findFirst(handleEnterFn, (n: any) => {
+        if (n.type !== 'IfStatement') return false;
+        const t = n.test;
+        return t.type === 'LogicalExpression' && t.operator === '||' &&
+          t.left.type === 'Identifier' && t.left.name === metaTestSrc &&
+          t.right.type === 'Identifier' && t.right.name === shiftTestSrc;
+      });
+    } else {
+      const metaOrShift = findFirst(handleEnterFn, (n: any) =>
+        n.type === 'LogicalExpression' && n.operator === '||' &&
+        n.left.type === 'MemberExpression' && n.left.property.name === 'meta' &&
+        n.right.type === 'MemberExpression' && n.right.property.name === 'shift');
+      const keyVar = src(metaOrShift.left.object);
+      metaTestSrc = `${keyVar}.meta`;
+      shiftTestSrc = `${keyVar}.shift`;
+      metaShiftIf = findFirst(handleEnterFn, (n: any) => {
+        if (n.type !== 'IfStatement') return false;
+        const t = n.test;
+        return t.type === 'LogicalExpression' && t.operator === '||' &&
+          t.left.type === 'MemberExpression' && t.left.property.name === 'meta' &&
+          t.right.type === 'MemberExpression' && t.right.property.name === 'shift';
+      });
+    }
     assert(metaShiftIf, 'Could not find if-statement for meta||shift');
 
     // cursor variable: from cursor.insert('\n') (where cursor is a plain Identifier)
@@ -124,42 +173,81 @@ const patch: Patch = {
     assert(cursorInserts.length >= 1, 'Could not find cursor.insert("\\n") in handleEnter');
     const cursorVar = cursorInserts[0].callee.object.name;
 
-    // onSubmit?.(originalValue): last statement in handleEnter body
+    // onSubmit side effect — source differs between shapes:
+    //   OLD: last body statement, e.g. `onSubmit?.(originalValue)`
+    //   NEW: intermediate `if (onSubmit) onSubmit(cursor.text), submitted=!0;`
+    // In both cases we capture the exact source so the Meta branch can
+    // replay the same side effect verbatim, preserving the "only call
+    // onSubmit if defined" semantics and the submitted-flag update.
     const bodyStmts = handleEnterFn.body.body;
-    const lastStmt = bodyStmts[bodyStmts.length - 1];
-    assert(
-      lastStmt.type === 'ExpressionStatement',
-      'Last statement of handleEnter is not an ExpressionStatement',
-    );
-    const onSubmitCallSrc = src(lastStmt.expression);
+    let submitStmt: any;   // full statement to splice (including trailing `;` and test guard)
+    let submitExprSrc: string;  // source to embed inside the Meta branch
 
-    // Apple Terminal if-block
+    if (isNewShape) {
+      // Look for an IfStatement whose test is a single Identifier and
+      // whose consequent calls that same Identifier (with cursor.text).
+      // This is distinct from the meta/shift if (which has a LogicalExpression test).
+      submitStmt = findFirst(handleEnterFn, (n: any) => {
+        if (n.type !== 'IfStatement') return false;
+        if (n.test?.type !== 'Identifier') return false;
+        const testName = n.test.name;
+        return findFirst(n.consequent, (c: any) =>
+          c.type === 'CallExpression' &&
+          c.callee?.type === 'Identifier' &&
+          c.callee.name === testName) !== null;
+      });
+      assert(submitStmt, 'Could not find `if (onSubmit) onSubmit(...)` block in handleEnter');
+      submitExprSrc = src(submitStmt);
+    } else {
+      const lastStmt = bodyStmts[bodyStmts.length - 1];
+      assert(
+        lastStmt.type === 'ExpressionStatement',
+        'Last statement of handleEnter is not an ExpressionStatement',
+      );
+      submitStmt = lastStmt;
+      submitExprSrc = src(lastStmt.expression);
+    }
+
+    // Apple Terminal if-block — present in both shapes
     const appleTerminalIf = findFirst(handleEnterFn, (n: any) => {
       if (n.type !== 'IfStatement') return false;
       return findFirst(n.test, (t: any) => t.type === 'Literal' && t.value === 'Apple_Terminal') !== null;
     });
 
-    // ── Apply edits (editor applies in reverse position order) ───────
+    // ── Apply edits ──────────────────────────────────────────────────
 
-    // 2d: Replace fallthrough onSubmit with return cursor (no-op).
-    editor.replaceRange(lastStmt.start, lastStmt.end, `return ${cursorVar}`);
+    // 2d: Remove/rewrite the onSubmit statement.
+    //     OLD: `onSubmit?.(value)` → `return cursor`
+    //     NEW: `if(onSubmit) onSubmit(cursor.text), submitted=!0;` → ``
+    //          (the trailing `return cursor` already handles the no-op return)
+    if (isNewShape) {
+      editor.replaceRange(submitStmt.start, submitStmt.end, '');
+    } else {
+      editor.replaceRange(submitStmt.start, submitStmt.end, `return ${cursorVar}`);
+    }
 
-    // 2c: Remove Apple Terminal if-block — no longer needed.
-    //     Meta/Option works natively in Apple Terminal (sends ESC+CR when
-    //     "Use Option as Meta Key" is enabled via /terminal-setup).
-    //     Plain Enter newlines go through the keybinding system.
+    // 2c: Remove Apple Terminal if-block.
     if (appleTerminalIf) {
       editor.replaceRange(appleTerminalIf.start, appleTerminalIf.end, '');
     }
 
-    // 2b: Replace meta||shift block. Now: Meta+Enter (Option+Enter) → submit,
-    //     Shift+Enter → newline (for CSI u terminals), plain Enter → no-op.
-    //     Meta+Enter is the only reliable modifier+Enter across all terminals
-    //     because it sends ESC+CR — a distinct sequence. Ctrl+Enter and
-    //     Shift+Enter send the same byte as plain Enter in most terminals.
+    // 2b: Replace meta||shift block with split meta/shift branches.
+    //     Meta+Enter (Option+Enter) → submit; Shift+Enter → newline;
+    //     plain Enter → no-op. Meta+Enter is the only reliable
+    //     modifier+Enter across all terminals (sends ESC+CR — distinct
+    //     sequence). Ctrl+Enter and Shift+Enter send the same byte as
+    //     plain Enter in most terminals.
+    //
+    //     OLD branch body: `${onSubmitExprSrc};return`
+    //     NEW branch body: `${submitIfSrc}return ${cursor}` — replay the
+    //     full `if(onSubmit) onSubmit(cursor.text), submitted=!0;`
+    //     statement verbatim, then return cursor unchanged.
+    const metaBranch = isNewShape
+      ? `{${submitExprSrc}return ${cursorVar}}`
+      : `{${submitExprSrc};return}`;
     editor.replaceRange(metaShiftIf.start, metaShiftIf.end,
-      `if(${keyVar}.meta){${onSubmitCallSrc};return}` +
-      `if(${keyVar}.shift)return ${cursorVar}.insert("\\n");`);
+      `if(${metaTestSrc})${metaBranch}` +
+      `if(${shiftTestSrc})return ${cursorVar}.insert("\\n");`);
 
     // ── Patch 3: Tip text ────────────────────────────────────────────
 

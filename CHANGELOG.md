@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.16] — 2026-04-14
+
+### Fixes
+
+- **auto-rename-first-message** — Fix `Could not find auto-title IfStatement referencing all four tag identifiers` against `claude-code >= 2.1.105`. The four `.startsWith(\`<${TAG}>\`)` command-tag checks were extracted out of the REPL IfStatement into a dedicated helper function, so the direct-4-tags matcher no longer found them. Discovery now falls back to locating the helper (FunctionDeclaration returning the 4-tag LogicalExpression) and picking the call site whose body contains a 2-arg `.then(onFulfilled, onRejected)` — the SDK streaming path uses `.then().catch()`, so arity disambiguates the REPL site reliably.
+- **swap-enter-submit** — Fix `Could not find handleEnter function` against `claude-code >= 2.1.105`. `handleEnter` was refactored: params changed from `(input, key)` to destructured `({meta:A, shift:B})`, the `key.meta || key.shift` MemberExpression became `A || B` on bare Identifiers, and the `onSubmit` call moved from the trailing statement into an intermediate `if (onSubmit) onSubmit(cursor.text), submitted=!0;` block. Detection now accepts either shape; the new-shape branch extracts the destructured param names, captures the submit side-effect source, and rewrites the meta/shift split to replay it verbatim in the Meta branch.
+
+### Internal
+
+- **Test target version bumped to 2.1.107** — `TARGET_VERSION` in `test/harness/bundle.ts` now defaults to `2.1.107`. Both fixed patches verified clean against 2.1.101, 2.1.105, and 2.1.107.
+
 ## [0.2.15] — 2026-04-14
 
 ### New patches

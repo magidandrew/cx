@@ -207,11 +207,26 @@ const patch: Patch = {
     assert(tagVarNames.size === 4,
       `Expected 4 distinct tag identifiers, got ${tagVarNames.size}`);
 
-    // Now scan every IfStatement for one whose test contains
-    // startsWith calls referencing all four tag identifiers.
-    const candidates = findAll(ast, (n: any) => n.type === 'IfStatement');
+    // Two shapes to handle:
+    //
+    //   OLD (≤2.1.101): the IfStatement's test contains all four
+    //   `.startsWith(`<${TAG}>`)` calls inline.
+    //
+    //   NEW (≥2.1.105): the four checks were extracted into a helper
+    //   function, e.g.
+    //     function hasCommandTag(q){
+    //       return q.startsWith(`<${T1}>`)||q.startsWith(`<${T2}>`)||…
+    //     }
+    //   and the REPL IfStatement's test now reads `!hasCommandTag(text)`.
+    //   In that case we locate the helper first, then pick the call site
+    //   that corresponds to the interactive REPL path (distinguished from
+    //   the SDK/streaming path by a 2-arg `.then(success, error)` shape —
+    //   the SDK path uses `.then(success).catch(error)`).
+
+    // OLD shape first — fast path for versions that still inline the 4 checks.
+    const ifCandidates = findAll(ast, (n: any) => n.type === 'IfStatement');
     let autoTitleIf: any = null;
-    for (const cand of candidates) {
+    for (const cand of ifCandidates) {
       const seen = new Set<string>();
       for (const c of walkAST(cand.test)) {
         const tagName = getTagFromStartsWith(c);
@@ -222,7 +237,58 @@ const patch: Patch = {
         break;
       }
     }
-    assert(autoTitleIf, 'Could not find auto-title IfStatement referencing all four tag identifiers');
+
+    // NEW shape fallback — look for the extracted helper function.
+    if (!autoTitleIf) {
+      let helperFnName: string | null = null;
+      const helperCandidates = findAll(ast, (n: any) =>
+        (n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression') &&
+        n.id?.type === 'Identifier' &&
+        n.body?.type === 'BlockStatement' &&
+        n.body.body?.length === 1 &&
+        n.body.body[0]?.type === 'ReturnStatement' &&
+        n.body.body[0].argument);
+      for (const fn of helperCandidates) {
+        const ret = fn.body.body[0];
+        const seen = new Set<string>();
+        for (const c of walkAST(ret.argument)) {
+          const tagName = getTagFromStartsWith(c);
+          if (tagName && tagVarNames.has(tagName)) seen.add(tagName);
+        }
+        if (seen.size === 4) {
+          helperFnName = fn.id.name;
+          break;
+        }
+      }
+      assert(helperFnName,
+        'Could not find either inline 4-startsWith IfStatement or extracted helper function');
+
+      // Walk every IfStatement that references the helper; pick the one
+      // whose body contains a 2-arg `.then(onFulfilled, onRejected)` call.
+      // The SDK path uses `.then(onFulfilled).catch(onRejected)` (1-arg),
+      // so arity disambiguates reliably.
+      for (const cand of ifCandidates) {
+        const callsHelper = findFirst(cand.test, (n: any) =>
+          n.type === 'CallExpression' &&
+          n.callee?.type === 'Identifier' &&
+          n.callee.name === helperFnName);
+        if (!callsHelper) continue;
+        const thenCall2arg = findFirst(cand.consequent, (n: any) =>
+          n.type === 'CallExpression' &&
+          n.callee?.type === 'MemberExpression' &&
+          n.callee.property?.type === 'Identifier' &&
+          n.callee.property.name === 'then' &&
+          n.arguments?.length === 2 &&
+          (n.arguments[0]?.type === 'ArrowFunctionExpression' ||
+           n.arguments[0]?.type === 'FunctionExpression'));
+        if (thenCall2arg) {
+          autoTitleIf = cand;
+          break;
+        }
+      }
+      assert(autoTitleIf,
+        `Found helper "${helperFnName}" but no calling IfStatement with a 2-arg .then() body`);
+    }
 
     // ── 4. Find the .then(arrow, …) callback ──────────────────────
     // Inside the auto-title block, the shape is

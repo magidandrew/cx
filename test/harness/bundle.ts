@@ -21,7 +21,7 @@ import type { Patch } from '../../src/types.js';
 // a specific claude-code release. Defaults to the most recent version we
 // know our patches work against — bumping this is an explicit code change
 // so CI failures from new claude-code versions are attributable.
-export const TARGET_VERSION = process.env.CC_VERSION ?? '2.1.101';
+export const TARGET_VERSION = process.env.CC_VERSION ?? '2.1.107';
 
 // ── Disk cache ────────────────────────────────────────────────────────────
 // Kept outside the project root's build/ so it survives `rm -rf dist/`.
