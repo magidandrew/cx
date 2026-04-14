@@ -70,6 +70,7 @@ export default defineConfig({
               { text: '/cd Command', link: '/patches/cd-command' },
               { text: 'Attribution Banner', link: '/patches/banner' },
               { text: 'Auto-Detect Terminal Theme', link: '/patches/auto-detect-theme' },
+              { text: 'Delete Sessions from /resume', link: '/patches/delete-sessions' },
               { text: 'Swap Enter / Meta+Enter', link: '/patches/swap-enter-submit' },
               { text: 'Cut prompt to clipboard', link: '/patches/cut-to-clipboard' },
               { text: 'Simple Spinner', link: '/patches/simple-spinner' },

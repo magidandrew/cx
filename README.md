@@ -23,6 +23,7 @@ Claude Code is great. But some things can't be configured with settings alone:
 - **Context usage, always visible** — See how much context you've used at all times, not just when you're about to hit the wall.
 - **Hot reload** — Change patches, tweak config, update Claude Code — press `Ctrl+X Ctrl+R` and the session restarts with fresh patches. Your conversation continues via `--continue`.
 - **Auto theme** — First-run default is `auto` instead of dark, so Claude matches your terminal background out of the box. Flip to light at 9am and the TUI follows ([#2990](https://github.com/anthropics/claude-code/issues/2990)).
+- **Delete sessions from `/resume`** — `Opt+D` on a focused session stages a confirm; second `Opt+D` wipes the transcript and its sidecar state. No more dropping to the shell to prune old sessions ([#13514](https://github.com/anthropics/claude-code/issues/13514)).
 - **Quiet mode** — No spinner tips, no feedback surveys, or npm-to-native-installer nag.
 
 19 patches total, 17 enabled by default. Toggle any combination on or off.
@@ -66,6 +67,7 @@ All `claude` arguments pass through: `cx --model sonnet -p "hello"` works exactl
 | `cx-resume-commands` | Show `cx` instead of `claude` in resume hints | on |
 | `cd-command` | `/cd <path>` — change working directory for bash commands | on |
 | `auto-detect-theme` | Default theme to `auto` so it matches your terminal background on first run | on |
+| `delete-sessions` | `Opt+D` in `/resume` deletes the focused session (second `Opt+D` confirms) | on |
 | `swap-enter-submit` | Enter inserts newline, Option+Enter submits | off |
 | `simple-spinner` | Replace spinner verb cycling with static "working" | off |
 

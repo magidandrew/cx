@@ -46,6 +46,7 @@ If you're running a CC version older than what's listed and a patch throws `no v
 | `cd-command` | [/cd Command](./cd-command) | `/cd <path>` — change where bash commands run (same as shell `cd`, keeps project settings) | on | `*` |
 | `banner` | [Attribution Banner](./banner) | Show "@wormcoffee" on the Claude Code title line | on | `*` |
 | `auto-detect-theme` | [Auto-Detect Terminal Theme](./auto-detect-theme) | Default theme to `auto` so it matches your terminal background on first run | on | `*` |
+| `delete-sessions` | [Delete Sessions from /resume](./delete-sessions) | `Opt+D` in the resume picker deletes the focused session (confirm by pressing `Opt+D` again) | on | `*` |
 | `remote-control-default-on` | [Remote Control on by Default](./remote-control-default-on) | Join Remote Control automatically on each new session (explicit config still wins) | off | `*` |
 | `swap-enter-submit` | [Swap Enter / Meta+Enter](./swap-enter-submit) | Enter inserts a newline, Option/Alt+Enter submits | off | `*` |
 | `simple-spinner` | [Simple Spinner](./simple-spinner) | Replace spinner verb cycling with static "working" / "worked" | off | `*` |
@@ -67,6 +68,7 @@ Per-version test results from the most recent runs. A `✓` means the patch appl
 | `cut-to-clipboard` | ✓ | ✓ |
 | `cx-badge` | ✓ | ✓ |
 | `cx-resume-commands` | ✓ | ✓ |
+| `delete-sessions` |  | ✓ |
 | `disable-paste-collapse` | ✓ | ✓ |
 | `disable-telemetry` | ✓ | ✓ |
 | `disable-text-truncation` | ✓ | ✓ |
