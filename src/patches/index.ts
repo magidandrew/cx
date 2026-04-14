@@ -28,3 +28,4 @@ export { default as autoRenameFirstMessage } from './auto-rename-first-message.j
 export { default as remoteControlDefaultOn } from './remote-control-default-on.js';
 export { default as noMultiInstallWarning } from './no-multi-install-warning.js';
 export { default as autoDetectTheme } from './auto-detect-theme.js';
+export { default as deleteSessions } from './delete-sessions.js';

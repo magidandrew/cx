@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.2.15] — 2026-04-14
+
+### New patches
+
+- **delete-sessions** — Restores the `Opt+D` delete flow in the `/resume` picker. First press stages a confirmation overlay; second press unlinks the `.jsonl` transcript plus the sibling `~/.claude/file-history/<sid>` and `~/.claude/session-env/<sid>` directories, then refreshes the list. Any other key cancels. Rewritten for the current bundle shape: anchors on `ObjectPattern` wherever it lives (param sig or separate `const {}`), accepts `FunctionDeclaration` for the key handler, and wraps the final return's argument in a conditional instead of reassigning a memoized root Identifier. File ops moved from CJS `require("fs")` to `import("node:fs/promises")` since the bundle is ESM. Same "accidental deletes" footgun the `0.2.10` removal called out still applies — enable deliberately.
+
 ## [0.2.10] — 2026-04-13
 
 ### New patches
