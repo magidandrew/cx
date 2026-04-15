@@ -1,3 +1,7 @@
+---
+title: "Random Clawd Color"
+description: "Picks a random color for the Clawd mascot on each startup."
+---
 # Random Clawd Color
 
 > Picks a random color for the Clawd mascot on each startup.

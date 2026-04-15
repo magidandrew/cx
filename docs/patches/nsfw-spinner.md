@@ -1,3 +1,7 @@
+---
+title: "NSFW Spinner"
+description: "Replace the rotating spinner verbs with a list of NSFW verbs."
+---
 # NSFW Spinner
 
 > Replace the rotating spinner verbs with a list of NSFW verbs.

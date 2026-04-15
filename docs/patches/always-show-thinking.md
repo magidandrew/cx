@@ -1,3 +1,7 @@
+---
+title: "Always Show Thinking"
+description: "Show thinking block content inline instead of collapsed behind \"∴ Thinking (ctrl+o to expand)\"."
+---
 # Always Show Thinking
 
 > Show thinking block content inline instead of collapsed behind "∴ Thinking (ctrl+o to expand)".

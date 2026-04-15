@@ -1,3 +1,7 @@
+---
+title: "Disable Long-Text Truncation"
+description: "Show long input inline instead of collapsing into `[...Truncated text #N +X lines...]`."
+---
 # Disable Long-Text Truncation
 
 > Show long input inline instead of collapsing into `[...Truncated text #N +X lines...]`.

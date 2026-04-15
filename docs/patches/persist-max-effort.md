@@ -1,3 +1,7 @@
+---
+title: "Persist Max Effort"
+description: "Save `\"max\"` effort to settings so it survives restarts."
+---
 # Persist Max Effort
 
 > Save `"max"` effort to settings so it survives restarts.

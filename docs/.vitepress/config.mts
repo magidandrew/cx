@@ -1,25 +1,120 @@
 import { defineConfig } from 'vitepress'
 
+const SITE_URL = 'https://cx.worms.coffee'
+const SITE_NAME = 'cx — Claude Code Extensions'
+const SITE_DESCRIPTION =
+  'cx is a modular, opt-in patch system for Anthropic\'s Claude Code CLI. Apply runtime AST patches — message queue, persistent max effort, no attribution, hot reload, session usage, and more — without ever modifying the upstream claude binary.'
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: 'cx',
-  description: 'Claude Code Extensions — modular, opt-in patches applied at runtime via AST transformation',
+  titleTemplate: ':title | cx — Claude Code Extensions',
+  description: SITE_DESCRIPTION,
   cleanUrls: true,
   lastUpdated: true,
   srcExclude: ['**/CLAUDE.md'],
 
+  sitemap: {
+    hostname: SITE_URL,
+  },
+
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/cx-logo.svg' }],
+    ['meta', { name: 'author', content: 'Andrew Magid' }],
+    ['meta', {
+      name: 'keywords',
+      content:
+        'claude code, claude code cli, claude code extensions, claude code patches, anthropic claude code, claude code plugins, claude code customization, claude code tweaks, cx, claude-code-extensions',
+    }],
+    ['meta', { name: 'theme-color', content: '#000000' }],
+    ['meta', { property: 'og:site_name', content: 'cx — Claude Code Extensions' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'cx — Claude Code Extensions' }],
-    ['meta', { property: 'og:description', content: 'Modular, opt-in patches for Claude Code. Unlock the power of Claude Code, without compromise.' }],
-    ['meta', { property: 'og:image', content: 'https://cx.worms.coffee/og-image.png' }],
-    ['meta', { property: 'og:url', content: 'https://cx.worms.coffee/' }],
+    ['meta', {
+      property: 'og:description',
+      content: 'Modular, opt-in patches for Claude Code. Unlock the power of Claude Code, without compromise.',
+    }],
+    ['meta', { property: 'og:image', content: `${SITE_URL}/og-image.png` }],
+    ['meta', { property: 'og:image:alt', content: 'cx — Claude Code Extensions' }],
+    ['meta', { property: 'og:url', content: `${SITE_URL}/` }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: 'cx — Claude Code Extensions' }],
-    ['meta', { name: 'twitter:description', content: 'Modular, opt-in patches for Claude Code. Unlock the power of Claude Code, without compromise.' }],
-    ['meta', { name: 'twitter:image', content: 'https://cx.worms.coffee/og-image.png' }],
+    ['meta', {
+      name: 'twitter:description',
+      content: 'Modular, opt-in patches for Claude Code. Unlock the power of Claude Code, without compromise.',
+    }],
+    ['meta', { name: 'twitter:image', content: `${SITE_URL}/og-image.png` }],
   ],
+
+  transformPageData(pageData) {
+    const cleanPath = pageData.relativePath
+      .replace(/(^|\/)index\.md$/, '$1')
+      .replace(/\.md$/, '')
+    const canonical = `${SITE_URL}/${cleanPath}`
+
+    pageData.frontmatter.head ??= []
+
+    pageData.frontmatter.head.push([
+      'link',
+      { rel: 'canonical', href: canonical },
+    ])
+    pageData.frontmatter.head.push([
+      'meta',
+      { property: 'og:url', content: canonical },
+    ])
+
+    const pageDescription =
+      pageData.frontmatter.description || pageData.description || SITE_DESCRIPTION
+    pageData.frontmatter.head.push([
+      'meta',
+      { property: 'og:description', content: pageDescription },
+    ])
+    pageData.frontmatter.head.push([
+      'meta',
+      { name: 'twitter:description', content: pageDescription },
+    ])
+
+    if (pageData.relativePath === 'index.md') {
+      pageData.frontmatter.head.push([
+        'script',
+        { type: 'application/ld+json' },
+        JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'SoftwareApplication',
+          name: 'cx — Claude Code Extensions',
+          alternateName: ['cx', 'claude-code-extensions'],
+          description: SITE_DESCRIPTION,
+          applicationCategory: 'DeveloperApplication',
+          operatingSystem: 'macOS, Linux, Windows',
+          url: SITE_URL,
+          downloadUrl: 'https://www.npmjs.com/package/claude-code-extensions',
+          license: 'https://opensource.org/licenses/MIT',
+          author: {
+            '@type': 'Person',
+            name: 'Andrew Magid',
+            url: 'https://github.com/magidandrew',
+          },
+          codeRepository: 'https://github.com/magidandrew/cx',
+          programmingLanguage: 'TypeScript',
+          offers: {
+            '@type': 'Offer',
+            price: '0',
+            priceCurrency: 'USD',
+          },
+        }),
+      ])
+      pageData.frontmatter.head.push([
+        'script',
+        { type: 'application/ld+json' },
+        JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: SITE_NAME,
+          url: SITE_URL,
+        }),
+      ])
+    }
+  },
 
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config

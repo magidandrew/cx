@@ -1,3 +1,8 @@
+---
+title: How cx works
+description: cx parses Claude Code's minified bundle into an AST with acorn, applies enabled patches via structural queries, caches the result, and spawns Node on the patched bundle. The original claude binary is never modified.
+---
+
 # How it works
 
 1. `cx` locates your global `@anthropic-ai/claude-code/cli.js`

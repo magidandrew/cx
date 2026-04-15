@@ -1,3 +1,7 @@
+---
+title: "cx Resume Commands"
+description: "Rewrite resume/continue command hints so they point at `cx` instead of bare `claude`."
+---
 # cx Resume Commands
 
 > Rewrite resume/continue command hints so they point at `cx` instead of bare `claude`.

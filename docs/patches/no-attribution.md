@@ -1,3 +1,7 @@
+---
+title: "No Attribution"
+description: "Strip Claude Code attribution from commits and PRs."
+---
 # No Attribution
 
 > Strip Claude Code attribution from commits and PRs.

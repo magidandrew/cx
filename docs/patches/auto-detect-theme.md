@@ -1,3 +1,7 @@
+---
+title: "Auto-Detect Terminal Theme"
+description: "Default to \"auto\" theme on first run so Claude matches your terminal background."
+---
 # Auto-Detect Terminal Theme
 
 > Default to "auto" theme on first run so Claude matches your terminal background.

@@ -1,3 +1,7 @@
+---
+title: "Anthropic Status Banner"
+description: "Warn in the footer when status.claude.com reports issues affecting Claude Code."
+---
 # Anthropic Status Banner
 
 > Warn in the footer when status.claude.com reports issues affecting Claude Code.

@@ -1,3 +1,7 @@
+---
+title: "Auto /rename on First Message"
+description: "Persist an auto-generated session title on the first user message so /resume and the terminal tab reflect it without typing /rename."
+---
 # Auto /rename on First Message
 
 > Persist an auto-generated session title on the first user message so /resume and the terminal tab reflect it without typing /rename.

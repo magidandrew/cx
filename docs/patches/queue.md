@@ -1,3 +1,7 @@
+---
+title: "Ctrl+Q Message Queue"
+description: "Queue messages with Ctrl+Q so they run one-by-one after the current turn finishes."
+---
 # Ctrl+Q Message Queue
 
 > Queue messages with Ctrl+Q so they run one-by-one after the current turn finishes.

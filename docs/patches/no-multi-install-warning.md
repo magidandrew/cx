@@ -1,3 +1,7 @@
+---
+title: "No Multi-Install Warning"
+description: "Suppress \"Multiple installations found\" nag in update/doctor."
+---
 # No Multi-Install Warning
 
 > Suppress "Multiple installations found" nag in update/doctor.

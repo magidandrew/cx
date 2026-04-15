@@ -1,3 +1,7 @@
+---
+title: "Ctrl+X Ctrl+R Reload"
+description: "Reload the cx session with a keystroke. Re-applies patches and keeps the conversation."
+---
 # Ctrl+X Ctrl+R Reload
 
 > Reload the cx session with a keystroke. Re-applies patches and keeps the conversation.

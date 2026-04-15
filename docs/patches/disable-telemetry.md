@@ -1,3 +1,7 @@
+---
+title: "Disable Telemetry"
+description: "Strip Datadog and first-party analytics calls from the bundle."
+---
 # Disable Telemetry
 
 > Strip Datadog and first-party analytics calls from the bundle.

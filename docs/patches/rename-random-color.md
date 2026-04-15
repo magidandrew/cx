@@ -1,3 +1,7 @@
+---
+title: "Random Color on /rename"
+description: "Randomize the prompt-bar color each time you run /rename."
+---
 # Random Color on /rename
 
 > Randomize the prompt-bar color each time you run /rename.

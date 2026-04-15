@@ -1,3 +1,7 @@
+---
+title: "Remote Control on by Default"
+description: "Join Remote Control automatically on each new session (explicit config still wins)."
+---
 # Remote Control on by Default
 
 > Join Remote Control automatically on each new session (explicit config still wins).

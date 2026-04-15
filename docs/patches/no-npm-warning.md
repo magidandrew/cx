@@ -1,3 +1,7 @@
+---
+title: "No NPM Warning"
+description: "Suppress the \"Claude Code has switched from npm to native installer\" nag."
+---
 # No NPM Warning
 
 > Suppress the "Claude Code has switched from npm to native installer" nag.

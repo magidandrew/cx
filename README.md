@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/node/v/claude-code-extensions)](https://nodejs.org)
 
-Modular, opt-in patches for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) applied at runtime via AST transformation. The original `claude` tool is never modified. `cx` parses the bundle, applies your selected patches, and spawns it. Everything else passes through untouched.
+The missing feature flags for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Run `cx` instead of `claude` to get a real message queue, always-visible context usage, auto-named chats, quiet mode, and 25+ other toggles. Your `claude` install stays untouched.
 
 ## Why cx?
 
@@ -20,11 +20,12 @@ Claude Code is great. But some things can't be configured with settings alone:
 - **See your pasted text** — Voice dictation and large pastes get collapsed into `[Pasted text #N]` which hides what you actually said. `cx` shows it inline so you can verify what was sent.
 - **No attribution** — No more `Co-authored-by: Claude` in your commits and PRs.
 - **Swap Enter / Option+Enter** — Enter inserts a newline, Option+Enter submits. Essential if you're on SSH, a non-English keyboard, or just prefer multiline-first input.
-- **Context usage, always visible** — See how much context you've used at all times, not just when you're about to hit the wall.
-- **Hot reload** — Change patches, tweak config, update Claude Code — press `Ctrl+X Ctrl+R` and the session restarts with fresh patches. Your conversation continues via `--continue`.
+- **Context usage, always visible** — Percentage in the footer from message one, not just when you're about to run out.
+- **Auto-named chats** — Your first message gets turned into a real title, so `/resume` and your terminal tab show something useful instead of a wall of "Untitled". No `/rename` required.
+- **Remote control on by default** — Every new window joins Remote Control automatically. No more realizing ten minutes in that you forgot to toggle it on.
 - **Auto theme** — First-run default is `auto` instead of dark, so Claude matches your terminal background out of the box. Flip to light at 9am and the TUI follows ([#2990](https://github.com/anthropics/claude-code/issues/2990)).
 - **Delete sessions from `/resume`** — `Opt+D` on a focused session stages a confirm; second `Opt+D` wipes the transcript and its sidecar state. No more dropping to the shell to prune old sessions ([#13514](https://github.com/anthropics/claude-code/issues/13514)).
-- **Quiet mode** — No spinner tips, no feedback surveys, or npm-to-native-installer nag.
+- **Quiet mode** — No spinner tips, no feedback surveys, no npm-to-native-installer nag.
 
 19 patches total, 17 enabled by default. Toggle any combination on or off.
 

@@ -1,3 +1,7 @@
+---
+title: "/cd Command"
+description: "`/cd <path>` changes where bash commands run, without losing your conversation."
+---
 # /cd Command
 
 > `/cd <path>` changes where bash commands run, without losing your conversation.

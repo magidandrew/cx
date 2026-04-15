@@ -1,3 +1,7 @@
+---
+title: "Cut prompt to clipboard (Alt+X)"
+description: "`Option/Alt+X` copies the current prompt text to the system clipboard and clears the input."
+---
 # Cut prompt to clipboard (Alt+X)
 
 > `Option/Alt+X` copies the current prompt text to the system clipboard and clears the input.

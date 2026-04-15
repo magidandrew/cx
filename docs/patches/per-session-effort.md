@@ -1,3 +1,7 @@
+---
+title: "Per-Session Effort"
+description: "Stop settings-file effort changes from clobbering other running sessions."
+---
 # Per-Session Effort
 
 > Stop settings-file effort changes from clobbering other running sessions.

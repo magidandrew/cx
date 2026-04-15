@@ -1,3 +1,8 @@
+---
+title: All patches
+description: Complete list of cx patches for Claude Code — message queue, persistent max effort, no attribution, hot reload, session usage, granular effort slider, and more. All opt-in, all version-tested daily.
+---
+
 # Patches
 
 Every cx patch is a pure AST transform against the Claude Code bundle. Patches are opt-in and toggleable via `cx-setup`. The table below lists all available patches, their default state, and which versions of `@anthropic-ai/claude-code` they work against.

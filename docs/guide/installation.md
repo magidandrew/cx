@@ -1,3 +1,8 @@
+---
+title: Installation
+description: Install cx (Claude Code Extensions) globally with npm. Requires @anthropic-ai/claude-code installed globally. Run cx-setup to toggle patches.
+---
+
 # Installation
 
 ```sh

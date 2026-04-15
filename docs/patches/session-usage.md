@@ -1,3 +1,7 @@
+---
+title: "Session Usage"
+description: "Always show `25% session used · 15% context used` in the footer."
+---
 # Session Usage
 
 > Always show `25% session used · 15% context used` in the footer.

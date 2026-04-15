@@ -1,3 +1,7 @@
+---
+title: "CX Badge"
+description: "Show a persistent `cx` indicator in the prompt footer."
+---
 # CX Badge
 
 > Show a persistent `cx` indicator in the prompt footer.

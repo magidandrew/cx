@@ -1,3 +1,7 @@
+---
+title: "No Tips"
+description: "Hide the `Tip: …` messages that appear in the spinner while Claude is working."
+---
 # No Tips
 
 > Hide the `Tip: …` messages that appear in the spinner while Claude is working.

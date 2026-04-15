@@ -1,3 +1,7 @@
+---
+title: "Disable Paste Collapse"
+description: "Pasted text stays inline in the prompt instead of collapsing into `[Pasted text #N]`."
+---
 # Disable Paste Collapse
 
 > Pasted text stays inline in the prompt instead of collapsing into `[Pasted text #N]`.

@@ -1,6 +1,9 @@
 ---
 # https://vitepress.dev/reference/default-theme-home-page
 layout: home
+title: cx — Claude Code Extensions
+titleTemplate: false
+description: cx is a modular, opt-in patch system for Anthropic's Claude Code CLI. Add a message queue, persistent max effort, no attribution, hot reload, session usage display, and 25+ other tweaks — without modifying the upstream claude binary.
 
 hero:
   name: "cx"

@@ -1,3 +1,7 @@
+---
+title: "No Feedback Prompts"
+description: "Remove every feedback survey prompt Claude Code can show you."
+---
 # No Feedback Prompts
 
 > Remove every feedback survey prompt Claude Code can show you.

@@ -1,3 +1,7 @@
+---
+title: "Simple Spinner"
+description: "Replace the rotating spinner verbs with a static \"working\" / \"worked\"."
+---
 # Simple Spinner
 
 > Replace the rotating spinner verbs with a static "working" / "worked".

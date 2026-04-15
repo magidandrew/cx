@@ -1,3 +1,7 @@
+---
+title: "Show File in Collapsed Read"
+description: "Show file paths and search patterns inside the collapsed tool display."
+---
 # Show File in Collapsed Read
 
 > Show file paths and search patterns inside the collapsed tool display.

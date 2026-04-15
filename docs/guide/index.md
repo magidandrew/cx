@@ -1,3 +1,8 @@
+---
+title: What is cx?
+description: cx wraps Anthropic's Claude Code CLI to apply modular, opt-in patches at runtime via AST transformation. Learn what cx does and why you'd want it.
+---
+
 # What is cx?
 
 `cx` is a thin wrapper around [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that applies modular, opt-in patches at runtime via AST transformation. The original `claude` binary is never modified — `cx` parses the bundle, applies your selected patches, caches the result, and spawns it. Everything else passes through untouched.

@@ -1,3 +1,7 @@
+---
+title: "Swap Enter / Meta+Enter"
+description: "Enter inserts a newline, Option/Alt+Enter submits."
+---
 # Swap Enter / Meta+Enter
 
 > Enter inserts a newline, Option/Alt+Enter submits.

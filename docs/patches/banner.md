@@ -1,3 +1,7 @@
+---
+title: "Attribution Banner"
+description: "Replace the \"Claude Code\" title line with cx's own name + an `@wormcoffee` link."
+---
 # Attribution Banner
 
 > Replace the "Claude Code" title line with cx's own name + an `@wormcoffee` link.

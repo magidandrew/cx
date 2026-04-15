@@ -1,3 +1,7 @@
+---
+title: "Delete Sessions from /resume"
+description: "`Opt+D` in the resume picker deletes the focused session (confirm by pressing `Opt+D` again)."
+---
 # Delete Sessions from /resume
 
 > `Opt+D` in the resume picker deletes the focused session (confirm by pressing `Opt+D` again).

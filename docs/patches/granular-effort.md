@@ -1,3 +1,7 @@
+---
+title: "Granular Effort Slider"
+description: "Replace the `/model` effort picker with a 1-9 numeric slider."
+---
 # Granular Effort Slider
 
 > Replace the `/model` effort picker with a 1-9 numeric slider.
