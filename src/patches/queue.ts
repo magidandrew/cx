@@ -41,34 +41,36 @@ const patch: Patch = {
     const depsArray = chatHandlersMemo.arguments[1];
     assert(depsArray?.type === 'ArrayExpression', 'Could not find deps array');
 
-    // PromptInput function (by ObjectPattern param with known prop keys)
-    const promptInputFn = findFirst(ast, (node: any) => {
-      if (node.type !== 'FunctionDeclaration' && node.type !== 'FunctionExpression') return false;
-      const p = node.params[0];
-      if (!p || p.type !== 'ObjectPattern') return false;
-      return getDestructuredName(p, 'input') !== null &&
-             getDestructuredName(p, 'mode') !== null &&
-             getDestructuredName(p, 'pastedContents') !== null;
-    });
-    assert(promptInputFn, 'Could not find PromptInput component function');
+    // PromptInput function — the function that contains the chatHandlers
+    // useMemo. In 2.1.108 `input` was dropped from props and is now read
+    // locally inside the component, so we locate the function via the
+    // memo instead of the (now-missing) `input` prop.
+    const promptInputFn = ctx.index.enclosingFunction(chatHandlersMemo);
+    assert(promptInputFn && promptInputFn.params[0]?.type === 'ObjectPattern',
+      'Could not find PromptInput component function');
     const propsPattern = promptInputFn.params[0];
 
-    // Props from destructured parameter (keys preserved in minified code)
+    // Props from destructured parameter (keys preserved in minified code).
+    // `input` is intentionally not in this list — see below.
     const v: Record<string, any> = {};
-    for (const name of ['input', 'mode', 'pastedContents', 'setPastedContents', 'onInputChange']) {
+    for (const name of ['mode', 'pastedContents', 'setPastedContents', 'onInputChange']) {
       v[name] = getDestructuredName(propsPattern, name);
       assert(v[name], `Could not find "${name}" in props destructuring`);
     }
 
-    // setCursorOffset — from useState(input.length)
+    // input + setCursorOffset — from useState(X.length) where X is the
+    // input string. X may be a prop (<=2.1.105) or a local hook result
+    // (2.1.108+); either way there's exactly one such useState in the
+    // component.
     const useStateCandidates = findAll(promptInputFn, (node: any) => {
       if (node.type !== 'VariableDeclarator' || node.id.type !== 'ArrayPattern' || node.id.elements.length < 2) return false;
       const init = node.init;
       if (!init || init.type !== 'CallExpression' || init.callee.type !== 'MemberExpression' || init.callee.property.name !== 'useState') return false;
       const arg = init.arguments[0];
-      return arg?.type === 'MemberExpression' && arg.property.name === 'length' && arg.object.name === v.input;
+      return arg?.type === 'MemberExpression' && arg.property.name === 'length' && arg.object.type === 'Identifier';
     });
-    assert(useStateCandidates.length === 1, `Expected 1 useState(${v.input}.length), found ${useStateCandidates.length}`);
+    assert(useStateCandidates.length === 1, `Expected 1 useState(X.length), found ${useStateCandidates.length}`);
+    v.input = useStateCandidates[0].init.arguments[0].object.name;
     v.setCursorOffset = useStateCandidates[0].id.elements[1].name;
 
     // trackAndSetInput — useCallback with deps=[onInputChange]
