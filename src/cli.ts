@@ -149,27 +149,31 @@ function buildIssueUrl(id: string | null, underlying: string): string {
  * can jump up to the offending patch line and mark it red before
  * printing the explanation below the list.
  */
-function reportPatchFailure(err: Error, enabled: string[]): void {
+function reportPatchFailure(err: Error, enabled: string[], compact: boolean): void {
   const { id, underlying } = parsePatchError(err);
   const total = enabled.length;
 
-  // Mark the offending patch as a red ✘ in the in-place checklist.
-  // If the id can't be located (or the parse phase threw before any
-  // patch started), leave the checklist alone — partially-applied
-  // lines are still useful context.
-  if (id) {
-    const idx = enabled.indexOf(id);
-    if (idx >= 0) {
-      const up = total - idx;
-      process.stderr.write(
-        `\x1b[${up}A\r\x1b[31m  ✘ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`,
-      );
+  if (compact) {
+    // Single progress line — replace it with a red failure header.
+    const label = id ? `  ✘ ${id} failed` : `  ◆ patch application failed`;
+    process.stderr.write(`\x1b[1A\r\x1b[31m${label}\x1b[0m\x1b[K\n`);
+  } else {
+    // Mark the offending patch as a red ✘ in the in-place checklist.
+    // If the id can't be located (or the parse phase threw before any
+    // patch started), leave the checklist alone — partially-applied
+    // lines are still useful context.
+    if (id) {
+      const idx = enabled.indexOf(id);
+      if (idx >= 0) {
+        const up = total - idx;
+        process.stderr.write(
+          `\x1b[${up}A\r\x1b[31m  ✘ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`,
+        );
+      }
     }
-  }
 
-  // Replace the "preparing" summary line at the top of the block
-  // with a red failure summary so the block header matches reality.
-  {
+    // Replace the "preparing" summary line at the top of the block
+    // with a red failure summary so the block header matches reality.
     const up = total + 1;
     process.stderr.write(
       `\x1b[${up}A\r\x1b[31m  ◆ patch application failed\x1b[0m\x1b[K\x1b[${up}B\r`,
@@ -246,16 +250,42 @@ async function ensureCache(): Promise<void> {
     const t0 = performance.now();
     const total = enabled.length;
 
-    // Line 0: prepare with elapsed timer, Lines 1..N: patch checklist
-    process.stderr.write(`\x1b[2m  ◇ preparing (0s)\x1b[0m\n`);
-    for (const id of enabled) {
-      process.stderr.write(`\x1b[2m  ◻ ${id}\x1b[0m\n`);
+    // Fall back to a single-line progress display when the terminal
+    // doesn't have enough rows for the full per-patch checklist —
+    // otherwise the list scrolls the header off-screen and the
+    // in-place cursor math breaks.
+    const rows = process.stderr.rows ?? Number.POSITIVE_INFINITY;
+    const compact = total + 2 > rows;
+
+    let phase: 'preparing' | 'applying' = 'preparing';
+    let done = 0;
+    let lastId = '';
+    const renderCompact = (): void => {
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+      const body = phase === 'preparing'
+        ? `preparing (${elapsed}s)`
+        : `applying patches ${done}/${total} (${elapsed}s)${lastId ? ` — ${lastId}` : ''}`;
+      process.stderr.write(`\x1b[1A\r\x1b[2m  ◇ ${body}\x1b[0m\x1b[K\n`);
+    };
+
+    if (compact) {
+      process.stderr.write(`\x1b[2m  ◇ preparing (0.0s)\x1b[0m\n`);
+    } else {
+      // Line 0: prepare with elapsed timer, Lines 1..N: patch checklist
+      process.stderr.write(`\x1b[2m  ◇ preparing (0s)\x1b[0m\n`);
+      for (const id of enabled) {
+        process.stderr.write(`\x1b[2m  ◻ ${id}\x1b[0m\n`);
+      }
     }
 
     const timer = setInterval(() => {
-      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-      const up = total + 1;
-      process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ preparing (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
+      if (compact) {
+        renderCompact();
+      } else {
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        const up = total + 1;
+        process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ preparing (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
+      }
     }, 100);
 
     const original = readFileSync(cliPath!, 'utf-8');
@@ -263,12 +293,23 @@ async function ensureCache(): Promise<void> {
     try {
       patched = await transformAsync(original, enabled, claudeVersion, {
         onReady() {
+          if (compact) {
+            phase = 'applying';
+            renderCompact();
+            return;
+          }
           clearInterval(timer);
           const up = total + 1;
           const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
           process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◇ ready (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
         },
         onDone(id: string) {
+          if (compact) {
+            done++;
+            lastId = id;
+            renderCompact();
+            return;
+          }
           const idx = enabled.indexOf(id);
           const up = total - idx;
           process.stderr.write(`\x1b[${up}A\r\x1b[32m  ✔ ${id}\x1b[0m\x1b[K\x1b[${up}B\r`);
@@ -281,13 +322,19 @@ async function ensureCache(): Promise<void> {
       // worker threw before onReady), then print a friendly block
       // explaining what's going on and how to unblock themselves.
       clearInterval(timer);
-      reportPatchFailure(err as Error, enabled);
+      reportPatchFailure(err as Error, enabled, compact);
       process.exit(1);
     }
+    clearInterval(timer);
 
     // Replace prepare line with summary
-    const up = total + 1;
-    process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◆ ${total} patches applied (${((performance.now() - t0) / 1000).toFixed(1)}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    if (compact) {
+      process.stderr.write(`\x1b[1A\r\x1b[2m  ◆ ${total} patches applied (${elapsed}s)\x1b[0m\x1b[K\n`);
+    } else {
+      const up = total + 1;
+      process.stderr.write(`\x1b[${up}A\r\x1b[2m  ◆ ${total} patches applied (${elapsed}s)\x1b[0m\x1b[K\x1b[${up}B\r`);
+    }
 
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(cachedCliPath, patched);
