@@ -77,6 +77,13 @@ jobs:
             .test-cache/report.json
           if-no-files-found: warn
 
+      # Render the same report on the run's Summary tab, so it's
+      # visible without downloading the artifact. The artifact is still
+      # the programmatic surface (there's no public API for summaries).
+      - name: Publish report to job summary
+        if: always() && hashFiles('report.md') != ''
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build issue body
         run: |
           VERSION=$(jq -r '.version'  .test-cache/report.json)
