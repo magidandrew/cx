@@ -1,38 +1,43 @@
 /**
  * Granular Effort Slider Patch
  *
- * Replaces the discrete low/medium/high/max effort picker in `/model` with
- * a numeric slider. Users cycle the value with ← →, the integer persists
+ * Replaces the discrete low/medium/high/xhigh/max effort picker in `/model`
+ * with a numeric slider. Users cycle the value with ← →, the integer persists
  * across sessions as-is (not the mapped canonical level), and the API call
- * receives a conventional low/medium/high/max string derived at the
+ * receives a conventional low/medium/high/xhigh/max string derived at the
  * request boundary.
  *
- * Per-model range mirrors what the model actually supports:
- *   - Opus 4.6   → 1..9 (low/medium/high/max)
- *   - Sonnet 4.6 → 1..7 (low/medium/high — no max)
+ * Per-model range mirrors what the model actually supports (2 buckets per
+ * supported level):
+ *   - Opus 4.7   → 1..10 (low/medium/high/xhigh/max)
+ *   - Opus 4.6   → 1..8  (low/medium/high/max — no xhigh)
+ *   - Sonnet 4.6 → 1..8  (low/medium/high/max — no xhigh)
  *   - Haiku      → no slider, no banner suffix (effort param is unsupported)
  *
- * Scale (1 = minimal, 5 = default, max = 7 or 9):
- *   1-2 → low
- *   3-5 → medium
- *   6-7 → high
- *   8-9 → max (only sent when the model supports it)
+ * Scale (each pair maps to one level):
+ *   1-2  → low
+ *   3-4  → medium
+ *   5-6  → high
+ *   7-8  → xhigh (when supported) or max (when xhigh unsupported)
+ *   9-10 → max (only when both xhigh and max are supported)
  *
  * Patch sites:
  *   1. cycleEffortLevel — numeric cycle via early-return prelude. Honors
- *      the function's third arg (includeMax) so non-max models top out at 7.
- *   2. ModelPicker display — "<capitalize(e)> effort" → " N/M" where M is
- *      9 for max-supporting models and 7 otherwise (read from the same
- *      focusedSupportsMax variable the picker already computes).
+ *      the function's includeMax (3rd arg) and includeXHigh (4th arg) so
+ *      the cap matches the supported levels.
+ *   2. ModelPicker display — replaces "<Capitalize(O6)> effort" suffix
+ *      with " N/M" where M is the per-model cap (read from focusedSupportsMax
+ *      and focusedSupportsXhigh, both extracted from the displayEffort clamp).
  *   3. convertEffortValueToLevel — pass numbers through unchanged so the
  *      picker re-initializes to the same integer the user picked.
  *   4. toPersistableEffort — allow numbers to flow to settings.
  *   5. Settings Zod schema — widen effortLevel from enum-of-strings to
  *      a union with int.
  *   6. API-layer effort assignment — map number → string right before the
- *      request body is built.
+ *      request body is built, using the model param (Y) to pick the right
+ *      level set.
  *   7. getEffortSuffix template — startup banner says "with N/M effort",
- *      gated on model: omitted for haiku, /9 for opus-4-6, /7 otherwise.
+ *      gated on model: omitted for haiku, /10 for opus-4-7, /8 otherwise.
  *
  * Works alongside persist-max-effort (which already appends "max" to the
  * effort enums). All edits are zero-width insertions so they compose
@@ -44,25 +49,27 @@ import type { Patch } from '../types.js';
 const patch: Patch = {
   id: 'granular-effort',
   name: 'Granular Effort Slider',
-  description: 'Replace /model effort picker with a 1-9 numeric slider',
+  description: 'Replace /model effort picker with a 1-10 numeric slider',
   defaultEnabled: true,
 
   apply(ctx) {
     const { ast, editor, find, src, assert } = ctx;
     const { findFirst } = find;
 
-    // ── 1. cycleEffortLevel: prepend early-return 1..9 cycle ─────────
+    // ── 1. cycleEffortLevel: prepend early-return numeric cycle ───────
     //
-    // Source (bundle):
-    //   function J0Y(q,K,_){
-    //     let z=_?["low","medium","high","max"]:["low","medium","high"],
-    //         Y=z.indexOf(q), O=Y!==-1?Y:z.indexOf("high");
-    //     if(K==="right") return z[(O+1)%z.length];
-    //     else return z[(O-1+z.length)%z.length];
+    // Source (bundle, post-2.1.111):
+    //   function qhY(q,K,_,z){
+    //     let Y=["low","medium","high"];
+    //     if(z)Y.push("xhigh");
+    //     if(_)Y.push("max");
+    //     let A=Y.indexOf(q),O=A!==-1?A:Y.indexOf("high");
+    //     if(K==="right")return Y[(O+1)%Y.length];
+    //     else return Y[(O-1+Y.length)%Y.length];
     //   }
     //
-    // Identified by its ConditionalExpression selecting between two
-    // ArrayExpressions whose first three elements are "low","medium","high".
+    // Identified by the unique `Y.push("xhigh")` CallExpression — only one
+    // function in the bundle pushes that string literal.
     //
     // We prepend an unconditional early-return sequence at the top of the
     // body rather than replacing it wholesale. This avoids a conflict with
@@ -71,33 +78,36 @@ const patch: Patch = {
     // overlap that insert and corrupt the output. With an early return, the
     // original body becomes dead code and inserts inside it are harmless.
     const cycleFn = findFirst(ast, (n: any) => {
-      if (n.type !== 'FunctionDeclaration' || n.params.length !== 3) return false;
-      const cond = findFirst(n, (c: any) => {
-        if (c.type !== 'ConditionalExpression') return false;
-        const isLevelArr = (a: any, len: number) =>
-          a?.type === 'ArrayExpression' &&
-          a.elements.length === len &&
-          a.elements[0]?.type === 'Literal' && a.elements[0].value === 'low' &&
-          a.elements[1]?.type === 'Literal' && a.elements[1].value === 'medium' &&
-          a.elements[2]?.type === 'Literal' && a.elements[2].value === 'high';
-        return isLevelArr(c.consequent, 4) && isLevelArr(c.alternate, 3);
-      });
-      return cond !== null;
+      if (n.type !== 'FunctionDeclaration' || n.params.length !== 4) return false;
+      const xhighPush = findFirst(n, (c: any) =>
+        c.type === 'CallExpression' &&
+        c.callee?.type === 'MemberExpression' &&
+        c.callee.property?.type === 'Identifier' &&
+        c.callee.property.name === 'push' &&
+        c.arguments.length === 1 &&
+        c.arguments[0]?.type === 'Literal' &&
+        c.arguments[0].value === 'xhigh',
+      );
+      return xhighPush !== null;
     });
     assert(cycleFn, 'Could not find cycleEffortLevel function');
 
-    const [pV, pDir, pAllowMax] = cycleFn.params.map((p: any) => p.name);
+    const [pV, pDir, pAllowMax, pAllowXhigh] = cycleFn.params.map((p: any) => p.name);
 
-    // The third arg (includeMax) is the picker's focusedSupportsMax bool.
-    // When the model doesn't support max, top out at 7 ("high") so the
-    // slider mirrors the original low/medium/high range. Also clamp the
-    // current value down to the cap when switching models — otherwise a
-    // 9 carried over from Opus would render as "9/7" on Sonnet.
+    // Build supported-levels list from includeMax/includeXHigh, allocate 2
+    // integer slots per level. cap = lvls.length * 2 → 6, 8, or 10.
+    // String inputs map to the midpoint of their bucket so they round-trip
+    // cleanly through display. Stale values above cap clamp down.
     const cyclePrelude =
-      `var _cxMax=${pAllowMax}?9:7;` +
+      `var _cxL=["low","medium","high"];` +
+      `if(${pAllowXhigh})_cxL.push("xhigh");` +
+      `if(${pAllowMax})_cxL.push("max");` +
+      `var _cxMax=_cxL.length*2;` +
+      `var _cxIdx=_cxL.indexOf(${pV});` +
       `var _cxY=typeof ${pV}==="number"?${pV}:` +
-      `(${pV}==="low"?2:${pV}==="medium"?5:${pV}==="max"?9:7);` +
+      `(_cxIdx>=0?(_cxIdx+1)*2:6);` +
       `if(_cxY>_cxMax)_cxY=_cxMax;` +
+      `if(_cxY<1)_cxY=1;` +
       `if(${pDir}==="right")return _cxY>=_cxMax?1:_cxY+1;` +
       `return _cxY<=1?_cxMax:_cxY-1;`;
     editor.insertAt(cycleFn.body.start + 1, cyclePrelude);
@@ -105,90 +115,96 @@ const patch: Patch = {
     // ── 2. ModelPicker display text ──────────────────────────────────
     //
     // Source (bundle):
-    //   createElement(ULK,{effort:e})," ",La(e)," effort",e===l?" (default)":""," ",...
+    //   createElement(jxK,{effort:O6})," ",
+    //   O6==="xhigh"?"xHigh":gH6(O6)," ","effort",
+    //   O6===n?" (default)":""," ",
+    //   ...
     //
-    // " effort" is a unique literal in the bundle. Walk up to its parent
-    // CallExpression, then swap
-    //   [ La(e), " effort", e===l ? " (default)" : "" ]
-    // for
-    //   [ Math.min(N, M), "/", M ]
-    // where N is the numeric form of the displayEffort and M is the per-model
-    // cap (9 if focusedSupportsMax, else 7). The "(default)" marker is
-    // dropped because the numeric display makes the current value explicit.
+    // We replace the run from the xhigh-label ConditionalExpression through
+    // the "(default)" ConditionalExpression with [Math.min(N,M),"/",M].
     //
-    // To find the focusedSupportsMax variable name in the bundle, locate
-    // the displayEffort clamp ConditionalExpression that the picker writes
-    // as `T==="max" && !X ? "high" : T` — `X` is focusedSupportsMax.
-    const effortLit = findFirst(ast, (n: any) =>
-      n.type === 'Literal' && n.value === ' effort');
-    assert(effortLit, 'Could not find " effort" literal');
+    // The xhigh-label cond is unique: `O6==="xhigh"?"xHigh":gH6(O6)` — the
+    // only ConditionalExpression in the bundle whose consequent is the
+    // string literal "xHigh".
+    //
+    // To find the focusedSupportsMax and focusedSupportsXhigh variable
+    // names we locate the displayEffort clamp:
+    //   i?"xhigh":v==="max"&&!z6||v==="xhigh"&&!A6?"high":v
+    // and pull `z6` and `A6` out of the negation operands.
+    const xhighLabelCond = findFirst(ast, (n: any) =>
+      n.type === 'ConditionalExpression' &&
+      n.consequent?.type === 'Literal' &&
+      n.consequent.value === 'xHigh');
+    assert(xhighLabelCond, 'Could not find ModelPicker xhigh-label conditional');
 
-    const effortCall = findFirst(ast, (n: any) =>
-      n.type === 'CallExpression' && n.arguments.some((a: any) => a === effortLit));
-    assert(effortCall, 'Could not find createElement call containing " effort"');
+    // Walk up to the createElement CallExpression containing this cond.
+    let pickerCall: any = ctx.index.parentMap.get(xhighLabelCond);
+    while (pickerCall && pickerCall.type !== 'CallExpression') {
+      pickerCall = ctx.index.parentMap.get(pickerCall);
+    }
+    assert(pickerCall, 'Could not find createElement call wrapping xhigh-label cond');
 
-    const callArgs = effortCall.arguments;
-    const effortIdx = callArgs.indexOf(effortLit);
-    assert(effortIdx >= 1 && effortIdx < callArgs.length - 1,
-      '" effort" literal not surrounded by expected siblings');
+    const callArgs = pickerCall.arguments;
+    const xhighIdx = callArgs.indexOf(xhighLabelCond);
+    assert(xhighIdx >= 0, 'xhigh-label cond not a direct child of the createElement call');
 
-    const laCall = callArgs[effortIdx - 1];
-    assert(
-      laCall?.type === 'CallExpression' && laCall.arguments.length === 1,
-      'Expected capitalize(e) CallExpression before " effort"',
-    );
-    const eCode = src(laCall.arguments[0]);
-
-    const defaultCond = callArgs[effortIdx + 1];
+    // The "(default)" ConditionalExpression should follow at xhighIdx+3:
+    //   [xhighIdx]   = O6==="xhigh"?"xHigh":gH6(O6)
+    //   [xhighIdx+1] = " "
+    //   [xhighIdx+2] = "effort"
+    //   [xhighIdx+3] = O6===n?" (default)":""
+    const defaultCond = callArgs[xhighIdx + 3];
     assert(
       defaultCond?.type === 'ConditionalExpression',
-      'Expected " (default)" ConditionalExpression after " effort"',
+      'Expected " (default)" ConditionalExpression at xhighIdx+3',
     );
     const defaultLit = findFirst(defaultCond, (n: any) =>
       n.type === 'Literal' && n.value === ' (default)');
     assert(defaultLit, 'Default-marker conditional did not contain " (default)"');
 
-    // Find `T==="max" && !X ? "high" : T` — extract X (focusedSupportsMax).
-    const dispEffortClamp = findFirst(ast, (n: any) => {
+    // The xhigh cond's test is `O6==="xhigh"` — extract the displayEffort
+    // identifier (O6) from the left side.
+    const dispVar = xhighLabelCond.test?.left?.name;
+    assert(dispVar, 'Could not extract displayEffort variable name from xhigh cond');
+
+    // Find the displayEffort clamp ConditionalExpression to extract
+    // focusedSupportsMax and focusedSupportsXhigh:
+    //   <test>?"high":<dispVar>
+    // where <test> = `v==="max"&&!z6||v==="xhigh"&&!A6` (LogicalExpression ||)
+    const dispClamp = findFirst(ast, (n: any) => {
       if (n.type !== 'ConditionalExpression') return false;
       if (n.consequent?.type !== 'Literal' || n.consequent.value !== 'high') return false;
       if (n.alternate?.type !== 'Identifier') return false;
       const t = n.test;
-      if (t?.type !== 'LogicalExpression' || t.operator !== '&&') return false;
-      const l = t.left, r = t.right;
-      if (
-        l?.type !== 'BinaryExpression' || l.operator !== '===' ||
-        l.left?.type !== 'Identifier' ||
-        l.right?.type !== 'Literal' || l.right.value !== 'max'
-      ) return false;
-      if (
-        r?.type !== 'UnaryExpression' || r.operator !== '!' ||
-        r.argument?.type !== 'Identifier'
-      ) return false;
-      return l.left.name === n.alternate.name;
+      if (t?.type !== 'LogicalExpression' || t.operator !== '||') return false;
+      const matchesMaxClause = (e: any, lit: string) =>
+        e?.type === 'LogicalExpression' && e.operator === '&&' &&
+        e.left?.type === 'BinaryExpression' && e.left.operator === '===' &&
+        e.left.right?.type === 'Literal' && e.left.right.value === lit &&
+        e.right?.type === 'UnaryExpression' && e.right.operator === '!' &&
+        e.right.argument?.type === 'Identifier';
+      return matchesMaxClause(t.left, 'max') && matchesMaxClause(t.right, 'xhigh');
     });
-    assert(dispEffortClamp, 'Could not find displayEffort `T==="max"&&!X?"high":T` clamp');
-    const supportsMaxVar = dispEffortClamp.test.right.argument.name;
+    assert(dispClamp, 'Could not find displayEffort clamp ConditionalExpression');
+    const supportsMaxVar = dispClamp.test.left.right.argument.name;
+    const supportsXhighVar = dispClamp.test.right.right.argument.name;
 
+    // Compose the replacement. M (cap) is computed from the support flags;
+    // N (numerator) maps O6 to its bucket midpoint when it's still a string.
     const numExpr =
-      `(typeof ${eCode}==="number"?${eCode}:` +
-      `({low:2,medium:5,high:7,max:9})[${eCode}]||5)`;
-    const capExpr = `(${supportsMaxVar}?9:7)`;
+      `(typeof ${dispVar}==="number"?${dispVar}:` +
+      `({low:2,medium:4,high:6,xhigh:8,max:10}[${dispVar}]||6))`;
+    const capExpr =
+      `((3+(${supportsXhighVar}?1:0)+(${supportsMaxVar}?1:0))*2)`;
     editor.replaceRange(
-      laCall.start, defaultCond.end,
+      xhighLabelCond.start, defaultCond.end,
       `Math.min(${numExpr},${capExpr}),"/",${capExpr}`,
     );
 
     // ── 3. convertEffortValueToLevel: preserve numbers ───────────────
     //
-    // Source (bundle, stripped for non-ants):
-    //   function Rw6(q){if(typeof q==="string")return lN8(q)?q:"high";return"high"}
-    //
-    // This is called at picker init (to seed the `effort` useState from
-    // AppState.effortValue). Public-build behavior collapses every number
-    // to "high", so a saved 4 would rehydrate as "high" and display as 7.
-    // Prepend a numeric passthrough so the picker round-trips the user's
-    // exact integer.
+    // Source (bundle):
+    //   function xt6(q){if(typeof q==="string")return kh8(q)?q:"high";return"high"}
     //
     // Identified structurally: a 1-param function whose body has a
     // `typeof q === "string"` check and returns the string literal "high"
@@ -207,7 +223,6 @@ const patch: Patch = {
         c.right?.type === 'Literal' && c.right.value === 'string',
       );
       if (!hasStringTypeof) return false;
-      // At least two "high" return literals.
       let highCount = 0;
       const scan = (node: any): void => {
         if (!node || typeof node !== 'object' || highCount >= 2) return;
@@ -233,14 +248,12 @@ const patch: Patch = {
     // ── 4. toPersistableEffort: allow numbers through ───────────────
     //
     // Source (bundle):
-    //   function Lw6(q){if(q==="low"||q==="medium"||q==="high")return q;return}
+    //   function It6(q){if(q==="low"||q==="medium"||q==="high"||q==="xhigh")return q;return}
     //
-    // After persist-max-effort patches it, the chain also includes "max".
-    // Prepend a numeric passthrough so the picker can hand a raw integer
-    // to updateSettingsForSource → settings.json.
-    //
-    // Identified structurally: a 1-param function whose body's first
-    // statement is an `if (q==="low" || q==="medium" || q==="high") return q`.
+    // Identified by walking the rightmost-first-three values of a `||`
+    // chain: the inner `(q==="low"||q==="medium")||q==="high"` subtree
+    // exists in this function regardless of how many trailing comparisons
+    // (xhigh, max) come after.
     const persistFn = findFirst(ast, (n: any) => {
       if (
         (n.type !== 'FunctionDeclaration' && n.type !== 'FunctionExpression') ||
@@ -248,10 +261,8 @@ const patch: Patch = {
       ) {
         return false;
       }
-      // Find the unique q==="low" || q==="medium" || q==="high" chain.
       const chain = findFirst(n, (c: any) => {
         if (c.type !== 'LogicalExpression' || c.operator !== '||') return false;
-        // Walk down the left chain collecting the literal values.
         const values: string[] = [];
         let cur: any = c;
         while (cur && cur.type === 'LogicalExpression' && cur.operator === '||') {
@@ -283,18 +294,15 @@ const patch: Patch = {
 
     // ── 5. Settings Zod schema: effortLevel accepts numbers ─────────
     //
-    // Source (bundle):
-    //   effortLevel:h.enum(["low","medium","high"]).optional().catch(void 0)
+    // Source (bundle, post-2.1.111):
+    //   effortLevel:y.enum(["low","medium","high","xhigh"]).optional().catch(void 0)
     //
-    // persist-max-effort widens the enum to include "max"; we then wrap
-    // the whole `h.enum([...])` call in `h.union([ ..., h.number().int() ])`
+    // Wrap the `y.enum([...])` call in `y.union([ ..., y.number().int() ])`
     // so numeric values survive the `.catch(void 0)` guard on read.
     //
-    // Identified structurally: a CallExpression where
-    //   callee = MemberExpression { object: h, property: "enum" }
-    // and the first argument is the 3-element ["low","medium","high"] array
-    // (there is exactly one such call in the public bundle — the cycleFn
-    // variant uses a raw ArrayExpression, not h.enum(...)).
+    // Identified structurally: a CallExpression with callee `<root>.enum`
+    // whose first argument is the 4-element ["low","medium","high","xhigh"]
+    // array. Other enum arrays in the bundle are 5 elements.
     const zodEnumCall = findFirst(ast, (n: any) => {
       if (n.type !== 'CallExpression') return false;
       if (
@@ -305,14 +313,15 @@ const patch: Patch = {
         return false;
       }
       const arg = n.arguments[0];
-      if (arg?.type !== 'ArrayExpression' || arg.elements.length !== 3) return false;
+      if (arg?.type !== 'ArrayExpression' || arg.elements.length !== 4) return false;
       return (
         arg.elements[0]?.type === 'Literal' && arg.elements[0].value === 'low' &&
         arg.elements[1]?.type === 'Literal' && arg.elements[1].value === 'medium' &&
-        arg.elements[2]?.type === 'Literal' && arg.elements[2].value === 'high'
+        arg.elements[2]?.type === 'Literal' && arg.elements[2].value === 'high' &&
+        arg.elements[3]?.type === 'Literal' && arg.elements[3].value === 'xhigh'
       );
     });
-    assert(zodEnumCall, 'Could not find h.enum(["low","medium","high"]) call');
+    assert(zodEnumCall, 'Could not find h.enum(["low","medium","high","xhigh"]) call');
 
     const zodRoot = src(zodEnumCall.callee.object);
     editor.insertAt(zodEnumCall.start, `${zodRoot}.union([`);
@@ -321,22 +330,23 @@ const patch: Patch = {
     // ── 6. API effort assignment: map number → string ───────────────
     //
     // Source (bundle):
-    //   function VdY(q,K,_,z,Y){
-    //     if(!Ch(Y)||"effort"in K)return;
-    //     if(q===void 0)z.push(HZ1);
-    //     else if(typeof q==="string")K.effort=q,z.push(HZ1)
+    //   function d6A(q,K,_,z,Y){
+    //     if(!QI(Y)||"effort"in K)return;
+    //     if(q===void 0)z.push(Qv1);
+    //     else if(typeof q==="string")K.effort=q,z.push(Qv1)
     //   }
     //
-    // Prepend a number→string conversion so a numeric appState.effortValue
-    // still results in a valid string effort being attached to the API
-    // request body. Without this, the `typeof q === "string"` guard would
-    // skip the assignment and the API would receive its default effort.
+    // The 5th arg (Y) is the model string. We use it to pick the right
+    // level set. Levels mirror the runtime support detectors:
+    //   xhigh: opus-4-7 only
+    //   max:   opus-4-7, opus-4-6, sonnet-4-6 (other models that support
+    //          effort drop through to no-max)
     //
     // Identified structurally: a FunctionDeclaration whose body contains a
     // `"effort" in X` BinaryExpression (unique in the bundle) AND assigns
     // to a MemberExpression with property name "effort".
     const apiEffortFn = findFirst(ast, (n: any) => {
-      if (n.type !== 'FunctionDeclaration' || n.params.length < 1) return false;
+      if (n.type !== 'FunctionDeclaration' || n.params.length < 5) return false;
       const hasInEffort = findFirst(n, (c: any) =>
         c.type === 'BinaryExpression' &&
         c.operator === 'in' &&
@@ -354,40 +364,43 @@ const patch: Patch = {
     assert(apiEffortFn, 'Could not find API effort assignment function');
 
     const apiParam = apiEffortFn.params[0].name;
+    const apiModelParam = apiEffortFn.params[4].name;
     editor.insertAt(
       apiEffortFn.body.start + 1,
-      `if(typeof ${apiParam}==="number")` +
-        `${apiParam}=${apiParam}<=2?"low":${apiParam}<=5?"medium":${apiParam}<=7?"high":"max";`,
+      `if(typeof ${apiParam}==="number"){` +
+        `var _cxM=String(${apiModelParam}||"").toLowerCase();` +
+        `var _cxXh=/opus-4-7/.test(_cxM);` +
+        `var _cxMx=/opus-4-7|opus-4-6|sonnet-4-6/.test(_cxM);` +
+        `var _cxL=["low","medium","high"];` +
+        `if(_cxXh)_cxL.push("xhigh");` +
+        `if(_cxMx)_cxL.push("max");` +
+        `var _cxI=Math.ceil(${apiParam}/2)-1;` +
+        `if(_cxI<0)_cxI=0;` +
+        `if(_cxI>=_cxL.length)_cxI=_cxL.length-1;` +
+        `${apiParam}=_cxL[_cxI];` +
+      `}`,
     );
 
     // ── 7. getEffortSuffix: render "N/M effort" in the startup banner ──
     //
     // Source (bundle):
-    //   function IV6(q,K){
+    //   function jy6(q,K){
     //     if(K===void 0)return"";
-    //     let _=bV6(q,K);
+    //     let _=wy6(q,K);
     //     if(_===void 0)return"";
-    //     return ` with ${Rw6(_)} effort`
+    //     return ` with ${xt6(_)} effort`
     //   }
     //
     // Rewrite the template literal so the banner reads
-    //   "Opus 4.6 (1M context) with 4/9 effort · Claude Max"
-    //   "Sonnet 4.6 with 5/7 effort · Claude Max"          (no max)
-    //   "Haiku 4.5 · Claude Max"                            (no effort)
+    //   "Opus 4.7 with 4/10 effort · Claude Max"   (xhigh + max)
+    //   "Opus 4.6 with 5/8 effort · Claude Max"   (max only)
+    //   "Haiku 4.5 · Claude Max"                   (no effort)
     // instead of the stock "with medium effort" wording.
     //
-    // Gating uses the enclosing function's model param. The mirroring of
-    // modelSupportsEffort/modelSupportsMaxEffort here is intentionally
-    // conservative — we only know the public Claude family, and any
-    // unfamiliar model string falls through to the /9 branch (matching
-    // stock CC's "default to true on 1P" behavior).
-    //
     // Match: a TemplateLiteral whose quasis are exactly [" with ", " effort"]
-    // and whose single expression is a call to convertFn (Rw6). There is
-    // another template literal in the bundle with the same quasis — the
-    // /model picker's "Set model to X with Y effort" toast — but its
-    // expression is a chalk.bold(...) call, not a Rw6(...) call, so the
-    // callee-name filter disambiguates.
+    // and whose single expression is a call to convertFn (xt6). The /model
+    // picker has another " with " template, but that one's expression is a
+    // chalk.bold(...) call, so the convertFn-name filter disambiguates.
     const convertName = convertFn.id?.name;
     assert(convertName, 'convertEffortValueToLevel must be a named declaration');
 
@@ -420,9 +433,11 @@ const patch: Patch = {
     const newSuffixTmpl =
       '(function(_m,_v){' +
         'if(/haiku/i.test(_m))return"";' +
+        'var _xh=/opus-4-7/i.test(_m);' +
+        'var _mx=/opus-4-7|opus-4-6|sonnet-4-6/i.test(_m);' +
+        'var _M=(3+(_xh?1:0)+(_mx?1:0))*2;' +
         'var _n=typeof _v==="number"?_v:' +
-          '({low:2,medium:5,high:7,max:9})[_v]||5;' +
-        'var _M=/opus-4-6/i.test(_m)?9:7;' +
+          '({low:2,medium:4,high:6,xhigh:8,max:10})[_v]||6;' +
         'if(_n>_M)_n=_M;' +
         'return" with "+_n+"/"+_M+" effort";' +
       '})(' + modelParam + ',' + suffixInner + ')';

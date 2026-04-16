@@ -11,7 +11,7 @@ import type { Patch } from '../types.js';
 const patch: Patch = {
   id: 'queue',
   name: 'Ctrl+Q Message Queue',
-  description: 'Queue messages with Ctrl+Q to run sequentially after current turn',
+  description: "Claude Code's default Enter steers mid-response, injecting your message into the current turn. Ctrl+Q instead buffers it as a true queued message that runs only after the current turn finishes.",
 
   apply(ctx) {
     const { ast, editor, find, query, src, assert } = ctx;

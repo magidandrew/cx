@@ -29,3 +29,4 @@ export { default as remoteControlDefaultOn } from './remote-control-default-on.j
 export { default as noMultiInstallWarning } from './no-multi-install-warning.js';
 export { default as autoDetectTheme } from './auto-detect-theme.js';
 export { default as deleteSessions } from './delete-sessions.js';
+export { default as gitBranchBanner } from './git-branch-banner.js';
