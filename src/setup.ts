@@ -269,16 +269,41 @@ function buildHeader(): string[] {
   return out;
 }
 
-function buildBody(cols: number): { body: string[]; patchLineIndex: number[]; visibleCount: number } {
+// Word-wrap `text` to lines at most `width` visible chars wide. Prefers
+// word boundaries; a word longer than the budget is hard-wrapped. Returns
+// at least one line (empty string for empty input).
+function wrapText(text: string, width: number): string[] {
+  if (text.length <= width) return [text];
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    if (word.length > width) {
+      if (line) { lines.push(line); line = ''; }
+      let rest = word;
+      while (rest.length > width) { lines.push(rest.slice(0, width)); rest = rest.slice(width); }
+      line = rest;
+      continue;
+    }
+    if (!line) line = word;
+    else if (line.length + 1 + word.length <= width) line += ' ' + word;
+    else { lines.push(line); line = word; }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
+}
+
+function buildBody(cols: number): { body: string[]; patchLineIndex: number[]; patchEndIndex: number[]; visibleCount: number } {
   const body: string[] = [];
   const patchLineIndex: number[] = [];
-  // Max description width. The patch line prefix is `8 + maxId` visible
-  // chars (2 pointer + 1 checkbox + 1 space + 1 glyph + 1 space + id +
-  // 2 pad), leaving the rest for the description. Truncate with an
-  // ellipsis so lines never wrap — if they wrapped, each array entry
-  // would take >1 visual row and the scroll math (which assumes 1:1)
-  // would be wrong.
+  const patchEndIndex: number[] = [];
+  // Patch line prefix is `8 + maxId` visible chars (2 pointer + 1 checkbox +
+  // 1 space + 1 glyph + 1 space + id + 2 pad), leaving the rest for the
+  // description. Long descriptions wrap to continuation rows indented to
+  // the description column — each wrap line takes its own `body` entry so
+  // the 1:1 array-index ↔ visual-row mapping still holds for scroll math.
   const maxDescWidth = Math.max(10, cols - (8 + maxId) - 1);
+  const contIndent = ' '.repeat(8 + maxId);
 
   // Section headers are deferred until at least one visible patch
   // follows them, so filtering doesn't leave empty-section labels
@@ -312,19 +337,21 @@ function buildBody(cols: number): { body: string[]; patchLineIndex: number[]; vi
     // visually linked by a continuous line segment.
     const glyphChar = conflictGlyph(i);
     const glyphPart = glyphChar === ' ' ? ' ' : `${DIM}${glyphChar}${RESET}${bg}`;
-    // Tag is rendered in the description column; its visible width
-    // eats into the description budget so long descriptions still
-    // truncate before wrapping.
+    // Tag lives in the description column on line 1; its width eats
+    // into the budget so line 1 + tag fits inside maxDescWidth.
     const tagText = p.tag ? `[${p.tag}] ` : '';
     const descBudget = Math.max(10, maxDescWidth - tagText.length);
-    const descText = p.description.length > descBudget
-      ? p.description.slice(0, Math.max(1, descBudget - 1)) + '…'
-      : p.description;
+    const descLines = wrapText(p.description, descBudget);
     const tagPart = p.tag ? `${MAGENTA}${tagText}${RESET}${bg}` : '';
-    const desc = `${tagPart}${DIM}${descText}${RESET}`;
 
     patchLineIndex[i] = body.length;
-    body.push(`${pointer}${checkbox} ${glyphPart} ${name}${pad}${desc}${RESET}`);
+    body.push(`${pointer}${checkbox} ${glyphPart} ${name}${pad}${tagPart}${DIM}${descLines[0]}${RESET}`);
+    // Continuation rows: indent to the description column, keep the
+    // selection background so multi-line highlights read as one block.
+    for (let j = 1; j < descLines.length; j++) {
+      body.push(`${bg}${contIndent}${DIM}${descLines[j]}${RESET}`);
+    }
+    patchEndIndex[i] = body.length - 1;
     visibleCount++;
   }
 
@@ -333,7 +360,7 @@ function buildBody(cols: number): { body: string[]; patchLineIndex: number[]; vi
     body.push(`  ${DIM}no patches match "${query}"${RESET}`);
   }
 
-  return { body, patchLineIndex, visibleCount };
+  return { body, patchLineIndex, patchEndIndex, visibleCount };
 }
 
 function buildFooter(): string[] {
@@ -367,7 +394,7 @@ function render(): void {
   const cols = process.stdout.columns || 80;
 
   const header = buildHeader();
-  const { body, patchLineIndex } = buildBody(cols);
+  const { body, patchLineIndex, patchEndIndex } = buildBody(cols);
   const footer = buildFooter();
 
   const prefix = CLEAR + HIDE_CURSOR;
@@ -397,10 +424,19 @@ function render(): void {
   const indicatorRows = 2;
   const bodyRows = Math.max(1, availableForBody - indicatorRows);
 
-  const target = patchLineIndex[cursor] ?? 0;
+  // Cursor patch spans [patchTop..patchBot] visual rows (one per wrapped
+  // line). Center on patchTop, then nudge the window so the whole patch
+  // fits when possible — bottom first (pull down if last line clips),
+  // then top (pull up so line 1 is never hidden). If the patch is taller
+  // than `bodyRows`, patchTop wins.
+  const patchTop = patchLineIndex[cursor] ?? 0;
+  const patchBot = patchEndIndex[cursor] ?? patchTop;
   const maxScrollTop = Math.max(0, body.length - bodyRows);
-  let scrollTop = Math.max(0, target - Math.floor(bodyRows / 2));
+  let scrollTop = Math.max(0, patchTop - Math.floor(bodyRows / 2));
   scrollTop = Math.min(scrollTop, maxScrollTop);
+  if (scrollTop + bodyRows - 1 < patchBot) scrollTop = patchBot - bodyRows + 1;
+  if (scrollTop > patchTop) scrollTop = patchTop;
+  scrollTop = Math.max(0, Math.min(scrollTop, maxScrollTop));
 
   const windowContent = body.slice(scrollTop, scrollTop + bodyRows);
   while (windowContent.length < bodyRows) windowContent.push('');
